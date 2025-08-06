@@ -27,27 +27,7 @@ const translation = {
   newApp: {
     startFromBlank: 'Crea da zero',
     startFromTemplate: 'Crea da modello',
-    captionAppType: 'Che tipo di app vuoi creare?',
-    chatbotDescription:
-      'Crea un\'applicazione basata sulla chat. Questa app utilizza un formato domanda-e-risposta, consentendo più round di conversazione continua.',
-    completionDescription:
-      'Crea un\'applicazione che genera testo di alta qualità basato sui prompt, come articoli, riassunti, traduzioni e altro.',
-    completionWarning: 'Questo tipo di app non sarà più supportato.',
-    agentDescription:
-      'Crea un Agente intelligente che può scegliere autonomamente gli strumenti per completare i compiti',
-    workflowDescription:
-      'Crea un\'applicazione che genera testo di alta qualità basato su flussi di lavoro orchestrati con un alto grado di personalizzazione. È adatto per utenti esperti.',
     workflowWarning: 'Attualmente in beta',
-    chatbotType: 'Metodo di orchestrazione Chatbot',
-    basic: 'Base',
-    basicTip: 'Per principianti, può passare a Chatflow in seguito',
-    basicFor: 'PER PRINCIPIANTI',
-    basicDescription:
-      'L\'Orchestrazione di base consente l\'orchestrazione di un\'app Chatbot utilizzando impostazioni semplici, senza la possibilità di modificare i prompt integrati. È adatta per principianti.',
-    advanced: 'Chatflow',
-    advancedFor: 'Per utenti avanzati',
-    advancedDescription:
-      'L\'Orchestrazione del flusso di lavoro orchestra i Chatbot sotto forma di flussi di lavoro, offrendo un alto grado di personalizzazione, inclusa la possibilità di modificare i prompt integrati. È adatta per utenti esperti.',
     captionName: 'Icona e nome dell\'app',
     appNamePlaceholder: 'Dai un nome alla tua app',
     captionDescription: 'Descrizione',
@@ -99,6 +79,7 @@ const translation = {
     agentUserDescription: 'Un agente intelligente in grado di ragionare in modo iterativo e di utilizzare autonomamente gli strumenti per raggiungere gli obiettivi del compito.',
     advancedShortDescription: 'Flusso di lavoro migliorato per conversazioni multiple',
     chooseAppType: 'Scegli un tipo di app',
+    dropDSLToCreateApp: 'Trascina il file DSL qui per creare l\'app',
   },
   editApp: 'Modifica Info',
   editAppTitle: 'Modifica Info App',
@@ -144,6 +125,14 @@ const translation = {
       notConfigured: 'Configura il provider per abilitare il tracciamento',
       moreProvider: 'Altri Provider',
     },
+    arize: {
+      title: 'Arize',
+      description: 'Osservabilità LLM di livello aziendale, valutazione online e offline, monitoraggio e sperimentazione—alimentata da OpenTelemetry. Progettata appositamente per applicazioni basate su LLM e agenti.',
+    },
+    phoenix: {
+      title: 'Phoenix',
+      description: 'Piattaforma open-source basata su OpenTelemetry per osservabilità, valutazione, ingegneria dei prompt e sperimentazione per i tuoi flussi di lavoro e agenti LLM.',
+    },
     langsmith: {
       title: 'LangSmith',
       description:
@@ -174,6 +163,10 @@ const translation = {
     weave: {
       title: 'Intrecciare',
       description: 'Weave è una piattaforma open-source per valutare, testare e monitorare le applicazioni LLM.',
+    },
+    aliyun: {
+      title: 'Monitoraggio Cloud',
+      description: 'La piattaforma di osservabilità completamente gestita e senza manutenzione fornita da Alibaba Cloud consente il monitoraggio, il tracciamento e la valutazione delle applicazioni Dify fin da subito.',
     },
   },
   answerIcon: {
@@ -219,7 +212,48 @@ const translation = {
     structuredTip: 'Le Uscite Strutturate sono una funzione che garantisce che il modello generi sempre risposte che aderiscano al tuo Schema JSON fornito.',
     notConfiguredTip: 'L\'output strutturato non è stato ancora configurato.',
     modelNotSupportedTip: 'Il modello attuale non supporta questa funzione e viene automaticamente downgradato a iniezione di prompt.',
+    required: 'Necessario',
   },
+  accessItemsDescription: {
+    anyone: 'Chiunque può accedere all\'app web',
+    specific: 'Solo gruppi o membri specifici possono accedere all\'app web.',
+    organization: 'Qualsiasi persona nell\'organizzazione può accedere all\'app web',
+    external: 'Solo gli utenti esterni autenticati possono accedere all\'applicazione Web',
+  },
+  accessControlDialog: {
+    accessItems: {
+      anyone: 'Chiunque con il link',
+      specific: 'Gruppi o membri specifici',
+      organization: 'Solo i membri all\'interno dell\'impresa',
+      external: 'Utenti esterni autenticati',
+    },
+    operateGroupAndMember: {
+      searchPlaceholder: 'Cerca gruppi e membri',
+      allMembers: 'Tutti i membri',
+      expand: 'Espandere',
+      noResult: 'Nessun risultato',
+    },
+    title: 'Controllo di accesso all\'app web',
+    description: 'Imposta le autorizzazioni di accesso all\'app web',
+    accessLabel: 'Chi ha accesso',
+    groups_one: '{{count}} GRUPPO',
+    groups_other: '{{count}} GRUPPI',
+    members_one: '{{count}} MEMBRO',
+    members_other: '{{count}} MEMBRI',
+    noGroupsOrMembers: 'Nessun gruppo o membro selezionato',
+    webAppSSONotEnabledTip: 'Si prega di contattare l\'amministratore dell\'impresa per configurare il metodo di autenticazione dell\'app web.',
+    updateSuccess: 'Aggiornamento avvenuto con successo',
+  },
+  publishApp: {
+    title: 'Chi può accedere all\'app web',
+    notSet: 'Non impostato',
+    notSetDesc: 'Attualmente nessuno può accedere all\'app web. Si prega di impostare i permessi.',
+  },
+  accessControl: 'Controllo di accesso all\'app web',
+  noAccessPermission: 'Nessun permesso per accedere all\'app web',
+  maxActiveRequestsPlaceholder: 'Inserisci 0 per illimitato',
+  maxActiveRequests: 'Massimo numero di richieste concorrenti',
+  maxActiveRequestsTip: 'Numero massimo di richieste attive concorrenti per app (0 per illimitato)',
 }
 
 export default translation

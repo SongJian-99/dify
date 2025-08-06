@@ -27,27 +27,7 @@ const translation = {
   newApp: {
     startFromBlank: 'Utwórz od podstaw',
     startFromTemplate: 'Utwórz z szablonu',
-    captionAppType: 'Jaki typ aplikacji chcesz stworzyć?',
-    chatbotDescription:
-      'Zbuduj aplikację opartą na czacie. Ta aplikacja używa formatu pytań i odpowiedzi, umożliwiając wielokrotne rundy ciągłej konwersacji.',
-    completionDescription:
-      'Zbuduj aplikację generującą teksty wysokiej jakości na podstawie monitów, takich jak generowanie artykułów, streszczeń, tłumaczeń i innych.',
-    completionWarning: 'Ten typ aplikacji nie będzie już obsługiwany.',
-    agentDescription:
-      'Zbuduj inteligentnego agenta, który może autonomicznie wybierać narzędzia do wykonywania zadań',
-    workflowDescription:
-      'Zbuduj aplikację, która w oparciu o przepływ pracy generuje teksty wysokiej jakości z dużą możliwością dostosowania. Jest odpowiednia dla doświadczonych użytkowników.',
     workflowWarning: 'Obecnie w fazie beta',
-    chatbotType: 'Metoda orkiestracji chatbota',
-    basic: 'Podstawowy',
-    basicTip: 'Dla początkujących, można przełączyć się później na Chatflow',
-    basicFor: 'Dla początkujących',
-    basicDescription:
-      'Podstawowa orkiestracja pozwala na skonfigurowanie aplikacji Chatbot za pomocą prostych ustawień, bez możliwości modyfikacji wbudowanych monitów. Jest odpowiednia dla początkujących.',
-    advanced: 'Chatflow',
-    advancedFor: 'Dla zaawansowanych użytkowników',
-    advancedDescription:
-      'Orkiestracja przepływu pracy organizuje Chatboty w formie przepływów pracy, oferując wysoki stopień dostosowania, w tym możliwość edycji wbudowanych monitów. Jest odpowiednia dla doświadczonych użytkowników.',
     captionName: 'Ikona i nazwa aplikacji',
     appNamePlaceholder: 'Podaj nazwę swojej aplikacji',
     captionDescription: 'Opis',
@@ -80,7 +60,7 @@ const translation = {
     appCreateDSLErrorPart1: 'Wykryto istotną różnicę w wersjach DSL. Wymuszenie importu może spowodować nieprawidłowe działanie aplikacji.',
     noTemplateFoundTip: 'Spróbuj wyszukać za pomocą różnych słów kluczowych.',
     noAppsFound: 'Nie znaleziono aplikacji',
-    foundResults: '{{liczba}} Wyniki',
+    foundResults: '{{count}} Wyniki',
     noTemplateFound: 'Nie znaleziono szablonów',
     chatbotUserDescription: 'Szybko zbuduj chatbota opartego na LLM z prostą konfiguracją. Możesz przełączyć się na Chatflow później.',
     optional: 'Fakultatywny',
@@ -91,7 +71,7 @@ const translation = {
     completionShortDescription: 'Asystent AI do zadań generowania tekstu',
     noIdeaTip: 'Nie masz pomysłów? Sprawdź nasze szablony',
     forAdvanced: 'DLA ZAAWANSOWANYCH UŻYTKOWNIKÓW',
-    foundResult: '{{liczba}} Wynik',
+    foundResult: '{{count}} Wynik',
     advancedShortDescription: 'Przepływ ulepszony dla wieloturowych czatów',
     learnMore: 'Dowiedz się więcej',
     chatbotShortDescription: 'Chatbot oparty na LLM z prostą konfiguracją',
@@ -99,6 +79,7 @@ const translation = {
     agentUserDescription: 'Inteligentny agent zdolny do iteracyjnego wnioskowania i autonomicznego wykorzystania narzędzi do osiągania celów zadań.',
     workflowShortDescription: 'Agentowy przepływ dla inteligentnych automatyzacji',
     advancedUserDescription: 'Przepływ z dodatkowymi funkcjami pamięci i interfejsem chatbota.',
+    dropDSLToCreateApp: 'Upuść plik DSL tutaj, aby utworzyć aplikację',
   },
   editApp: 'Edytuj informacje',
   editAppTitle: 'Edytuj informacje o aplikacji',
@@ -142,6 +123,14 @@ const translation = {
       notConfigured: 'Skonfiguruj dostawcę, aby włączyć śledzenie',
       moreProvider: 'Więcej dostawców',
     },
+    arize: {
+      title: 'Arize',
+      description: 'Obserwowalność LLM klasy korporacyjnej, ocena online i offline, monitorowanie i eksperymentowanie — oparta na OpenTelemetry. Zaprojektowana specjalnie dla aplikacji opartych na LLM i agentach.',
+    },
+    phoenix: {
+      title: 'Phoenix',
+      description: 'Otwarta i oparta na OpenTelemetry platforma do obserwowalności, oceny, inżynierii promptów i eksperymentowania dla Twoich przepływów pracy i agentów LLM.',
+    },
     langsmith: {
       title: 'LangSmith',
       description: 'Kompleksowa platforma deweloperska dla każdego etapu cyklu życia aplikacji opartej na LLM.',
@@ -169,6 +158,10 @@ const translation = {
     weave: {
       title: 'Tkaj',
       description: 'Weave to platforma open-source do oceny, testowania i monitorowania aplikacji LLM.',
+    },
+    aliyun: {
+      title: 'Monitor Chmury',
+      description: 'W pełni zarządzana i wolna od konserwacji platforma obserwowalności oferowana przez Alibaba Cloud umożliwia gotowe monitorowanie, śledzenie i oceny aplikacji Dify.',
     },
   },
   answerIcon: {
@@ -216,6 +209,46 @@ const translation = {
     modelNotSupported: 'Model nie jest obsługiwany',
     modelNotSupportedTip: 'Aktualny model nie obsługuje tej funkcji i zostaje automatycznie obniżony do wstrzyknięcia zapytania.',
   },
+  accessItemsDescription: {
+    anyone: 'Każdy może uzyskać dostęp do aplikacji webowej',
+    specific: 'Tylko określone grupy lub członkowie mogą uzyskać dostęp do aplikacji internetowej',
+    organization: 'Każdy w organizacji ma dostęp do aplikacji internetowej.',
+    external: 'Tylko uwierzytelnieni zewnętrzni użytkownicy mogą uzyskać dostęp do aplikacji internetowej.',
+  },
+  accessControlDialog: {
+    accessItems: {
+      anyone: 'Każdy z linkiem',
+      specific: 'Specyficzne grupy lub członkowie',
+      organization: 'Tylko członkowie w obrębie przedsiębiorstwa',
+      external: 'Uwierzytelnieni użytkownicy zewnętrzni',
+    },
+    operateGroupAndMember: {
+      searchPlaceholder: 'Szukaj grup i członków',
+      allMembers: 'Wszyscy członkowie',
+      expand: 'Rozszerz',
+      noResult: 'Brak wyniku',
+    },
+    title: 'Kontrola dostępu do aplikacji internetowej',
+    description: 'Ustaw uprawnienia dostępu do aplikacji webowej',
+    accessLabel: 'Kto ma dostęp',
+    groups_one: '{{count}} GRUPA',
+    groups_other: '{{count}} GRUPY',
+    members_one: '{{count}} CZŁONEK',
+    members_other: '{{count}} CZŁONKÓW',
+    noGroupsOrMembers: 'Nie wybrano żadnych grup ani członków',
+    webAppSSONotEnabledTip: 'Proszę skontaktować się z administratorem przedsiębiorstwa, aby skonfigurować metodę uwierzytelniania aplikacji internetowej.',
+    updateSuccess: 'Aktualizacja powiodła się',
+  },
+  publishApp: {
+    title: 'Kto ma dostęp do aplikacji internetowej',
+    notSet: 'Nie ustawiono',
+    notSetDesc: 'Obecnie nikt nie może uzyskać dostępu do aplikacji internetowej. Proszę ustawić uprawnienia.',
+  },
+  accessControl: 'Kontrola dostępu do aplikacji internetowej',
+  noAccessPermission: 'Brak uprawnień do dostępu do aplikacji internetowej',
+  maxActiveRequests: 'Maksymalne równoczesne żądania',
+  maxActiveRequestsPlaceholder: 'Wprowadź 0, aby uzyskać nielimitowane',
+  maxActiveRequestsTip: 'Maksymalna liczba jednoczesnych aktywnych żądań na aplikację (0 dla nieograniczonej)',
 }
 
 export default translation

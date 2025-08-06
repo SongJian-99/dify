@@ -1,8 +1,6 @@
 const translation = {
   steps: {
     header: {
-      creation: 'Crear conocimiento',
-      update: 'Agregar datos',
       fallbackRoute: 'Conocimiento',
     },
     one: 'Elegir fuente de datos',
@@ -63,7 +61,6 @@ const translation = {
       run: 'Ejecutar',
       firecrawlTitle: 'Extraer contenido web con 🔥Firecrawl',
       firecrawlDoc: 'Documentación de Firecrawl',
-      firecrawlDocLink: 'https://docs.dify.ai/en/guides/knowledge-base/create-knowledge-and-upload-documents/import-content-data/sync-from-website',
       options: 'Opciones',
       crawlSubPage: 'Rastrear subpáginas',
       limit: 'Límite',
@@ -92,7 +89,6 @@ const translation = {
       configureFirecrawl: 'Configurar Firecrawl',
       watercrawlDoc: 'Documentos de Watercrawl',
       configureJinaReader: 'Configurar Jina Reader',
-      watercrawlDocLink: 'https://docs.dify.ai/es/guías/base-de-conocimientos/crear-conocimientos-y-subir-documentos/importar-datos-de-contenido/sincronizar-desde-el-sitio-web',
       configureWatercrawl: 'Configurar Watercrawl',
       waterCrawlNotConfiguredDescription: 'Configura Watercrawl con la clave de API para usarlo.',
     },
