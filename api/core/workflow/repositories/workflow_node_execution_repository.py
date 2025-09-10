@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, Optional, Protocol
 
-from core.workflow.entities.workflow_node_execution import WorkflowNodeExecution
+from core.workflow.entities import WorkflowNodeExecution
 
 
 @dataclass
@@ -26,9 +26,15 @@ class WorkflowNodeExecutionRepository(Protocol):
     application domains or deployment scenarios.
     """
 
-    def save(self, execution: WorkflowNodeExecution) -> None:
+    def save(self, execution: WorkflowNodeExecution):
         """
         Save or update a NodeExecution instance.
+
+        This method saves all data on the `WorkflowNodeExecution` object, except for `inputs`, `process_data`,
+        and `outputs`. Its primary purpose is to persist the status and various metadata, such as execution time
+        and execution-related details.
+
+        It's main purpose is to save the status and various metadata (execution time, execution metadata etc.)
 
         This method handles both creating new records and updating existing ones.
         The implementation should determine whether to create or update based on
@@ -36,6 +42,14 @@ class WorkflowNodeExecutionRepository(Protocol):
 
         Args:
             execution: The NodeExecution instance to save or update
+        """
+        ...
+
+    def save_execution_data(self, execution: WorkflowNodeExecution):
+        """Save or update the inputs, process_data, or outputs associated with a specific
+        node_execution record.
+
+        If any of the inputs, process_data, or outputs are None, those fields will not be updated.
         """
         ...
 

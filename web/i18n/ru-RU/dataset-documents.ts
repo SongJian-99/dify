@@ -31,7 +31,6 @@ const translation = {
       sync: 'Синхронизировать',
       resume: 'Возобновить',
       pause: 'Пауза',
-      download: 'Скачать файл',
     },
     index: {
       enable: 'Включить',
@@ -100,6 +99,9 @@ const translation = {
       upload_file: 'Загрузить файл',
       notion: 'Синхронизировать из Notion',
       github: 'Синхронизировать из Github',
+      local_file: 'Локальный файл',
+      online_document: 'Онлайн-документ',
+      website_crawl: 'Сканирование сайта',
     },
     type: {
       book: 'Книга',
@@ -343,7 +345,6 @@ const translation = {
     keywords: 'Ключевые слова',
     addKeyWord: 'Добавить ключевое слово',
     keywordError: 'Максимальная длина ключевого слова - 20',
-    characters: 'символов',
     hitCount: 'Количество обращений',
     vectorHash: 'Векторный хэш: ',
     questionPlaceholder: 'добавьте вопрос здесь',

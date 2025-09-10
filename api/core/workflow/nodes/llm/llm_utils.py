@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from datetime import UTC, datetime
 from typing import Optional, cast
 
 from sqlalchemy import select, update
@@ -14,15 +13,16 @@ from core.model_manager import ModelInstance, ModelManager
 from core.model_runtime.entities.llm_entities import LLMUsage
 from core.model_runtime.entities.model_entities import ModelType
 from core.model_runtime.model_providers.__base.large_language_model import LargeLanguageModel
-from core.plugin.entities.plugin import ModelProviderID
 from core.prompt.entities.advanced_prompt_entities import MemoryConfig
 from core.variables.segments import ArrayAnySegment, ArrayFileSegment, FileSegment, NoneSegment, StringSegment
-from core.workflow.entities.variable_pool import VariablePool
+from core.workflow.entities import VariablePool
 from core.workflow.enums import SystemVariableKey
 from core.workflow.nodes.llm.entities import ModelConfig
-from models import db
+from extensions.ext_database import db
+from libs.datetime_utils import naive_utc_now
 from models.model import Conversation
 from models.provider import Provider, ProviderType
+from models.provider_ids import ModelProviderID
 
 from .exc import InvalidVariableTypeError, LLMModeRequiredError, ModelNotExistError
 
@@ -107,7 +107,7 @@ def fetch_memory(
     return memory
 
 
-def deduct_llm_quota(tenant_id: str, model_instance: ModelInstance, usage: LLMUsage) -> None:
+def deduct_llm_quota(tenant_id: str, model_instance: ModelInstance, usage: LLMUsage):
     provider_model_bundle = model_instance.provider_model_bundle
     provider_configuration = provider_model_bundle.configuration
 
@@ -149,7 +149,7 @@ def deduct_llm_quota(tenant_id: str, model_instance: ModelInstance, usage: LLMUs
                 )
                 .values(
                     quota_used=Provider.quota_used + used_quota,
-                    last_used=datetime.now(tz=UTC).replace(tzinfo=None),
+                    last_used=naive_utc_now(),
                 )
             )
             session.execute(stmt)

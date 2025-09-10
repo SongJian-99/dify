@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, Optional, cast
 from urllib.parse import urlparse
 
 import sqlalchemy as sa
@@ -8,29 +8,33 @@ from deprecated import deprecated
 from sqlalchemy import ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from core.file import helpers as file_helpers
 from core.helper import encrypter
-from core.mcp.types import Tool
 from core.tools.entities.common_entities import I18nObject
 from core.tools.entities.tool_bundle import ApiToolBundle
 from core.tools.entities.tool_entities import ApiProviderSchemaType, WorkflowToolParameterConfiguration
-from models.base import Base
+from models.base import Base, TypeBase
 
 from .engine import db
 from .model import Account, App, Tenant
 from .types import StringUUID
 
+if TYPE_CHECKING:
+    from core.mcp.types import Tool as MCPTool
+    from core.tools.entities.common_entities import I18nObject
+    from core.tools.entities.tool_bundle import ApiToolBundle
+    from core.tools.entities.tool_entities import ApiProviderSchemaType, WorkflowToolParameterConfiguration
+
 
 # system level tool oauth client params (client_id, client_secret, etc.)
-class ToolOAuthSystemClient(Base):
+class ToolOAuthSystemClient(TypeBase):
     __tablename__ = "tool_oauth_system_clients"
     __table_args__ = (
         sa.PrimaryKeyConstraint("id", name="tool_oauth_system_client_pkey"),
         sa.UniqueConstraint("plugin_id", "provider", name="tool_oauth_system_client_plugin_id_provider_idx"),
     )
 
-    id: Mapped[str] = mapped_column(StringUUID, server_default=sa.text("uuid_generate_v4()"))
-    plugin_id = mapped_column(String(512), nullable=False)
+    id: Mapped[str] = mapped_column(StringUUID, server_default=sa.text("uuid_generate_v4()"), init=False)
+    plugin_id: Mapped[str] = mapped_column(String(512), nullable=False)
     provider: Mapped[str] = mapped_column(String(255), nullable=False)
     # oauth params of the tool provider
     encrypted_oauth_params: Mapped[str] = mapped_column(sa.Text, nullable=False)
@@ -54,8 +58,8 @@ class ToolOAuthTenantClient(Base):
     encrypted_oauth_params: Mapped[str] = mapped_column(sa.Text, nullable=False)
 
     @property
-    def oauth_params(self) -> dict:
-        return cast(dict, json.loads(self.encrypted_oauth_params or "{}"))
+    def oauth_params(self) -> dict[str, Any]:
+        return cast(dict[str, Any], json.loads(self.encrypted_oauth_params or "{}"))
 
 
 class BuiltinToolProvider(Base):
@@ -96,8 +100,8 @@ class BuiltinToolProvider(Base):
     expires_at: Mapped[int] = mapped_column(sa.BigInteger, nullable=False, server_default=sa.text("-1"))
 
     @property
-    def credentials(self) -> dict:
-        return cast(dict, json.loads(self.encrypted_credentials))
+    def credentials(self) -> dict[str, Any]:
+        return cast(dict[str, Any], json.loads(self.encrypted_credentials))
 
 
 class ApiToolProvider(Base):
@@ -138,16 +142,20 @@ class ApiToolProvider(Base):
     updated_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, server_default=func.current_timestamp())
 
     @property
-    def schema_type(self) -> ApiProviderSchemaType:
+    def schema_type(self) -> "ApiProviderSchemaType":
+        from core.tools.entities.tool_entities import ApiProviderSchemaType
+
         return ApiProviderSchemaType.value_of(self.schema_type_str)
 
     @property
-    def tools(self) -> list[ApiToolBundle]:
+    def tools(self) -> list["ApiToolBundle"]:
+        from core.tools.entities.tool_bundle import ApiToolBundle
+
         return [ApiToolBundle(**tool) for tool in json.loads(self.tools_str)]
 
     @property
-    def credentials(self) -> dict:
-        return dict(json.loads(self.credentials_str))
+    def credentials(self) -> dict[str, Any]:
+        return dict[str, Any](json.loads(self.credentials_str))
 
     @property
     def user(self) -> Account | None:
@@ -160,7 +168,7 @@ class ApiToolProvider(Base):
         return db.session.query(Tenant).where(Tenant.id == self.tenant_id).first()
 
 
-class ToolLabelBinding(Base):
+class ToolLabelBinding(TypeBase):
     """
     The table stores the labels for tools.
     """
@@ -171,7 +179,7 @@ class ToolLabelBinding(Base):
         sa.UniqueConstraint("tool_id", "label_name", name="unique_tool_label_bind"),
     )
 
-    id: Mapped[str] = mapped_column(StringUUID, server_default=sa.text("uuid_generate_v4()"))
+    id: Mapped[str] = mapped_column(StringUUID, server_default=sa.text("uuid_generate_v4()"), init=False)
     # tool id
     tool_id: Mapped[str] = mapped_column(String(64), nullable=False)
     # tool type
@@ -230,7 +238,9 @@ class WorkflowToolProvider(Base):
         return db.session.query(Tenant).where(Tenant.id == self.tenant_id).first()
 
     @property
-    def parameter_configurations(self) -> list[WorkflowToolParameterConfiguration]:
+    def parameter_configurations(self) -> list["WorkflowToolParameterConfiguration"]:
+        from core.tools.entities.tool_entities import WorkflowToolParameterConfiguration
+
         return [WorkflowToolParameterConfiguration(**config) for config in json.loads(self.parameter_configuration)]
 
     @property
@@ -278,6 +288,8 @@ class MCPToolProvider(Base):
     updated_at: Mapped[datetime] = mapped_column(
         sa.DateTime, nullable=False, server_default=sa.text("CURRENT_TIMESTAMP(0)")
     )
+    timeout: Mapped[float] = mapped_column(sa.Float, nullable=False, server_default=sa.text("30"))
+    sse_read_timeout: Mapped[float] = mapped_column(sa.Float, nullable=False, server_default=sa.text("300"))
 
     def load_user(self) -> Account | None:
         return db.session.query(Account).where(Account.id == self.user_id).first()
@@ -287,18 +299,22 @@ class MCPToolProvider(Base):
         return db.session.query(Tenant).where(Tenant.id == self.tenant_id).first()
 
     @property
-    def credentials(self) -> dict:
+    def credentials(self) -> dict[str, Any]:
         try:
-            return cast(dict, json.loads(self.encrypted_credentials)) or {}
+            return cast(dict[str, Any], json.loads(self.encrypted_credentials)) or {}
         except Exception:
             return {}
 
     @property
-    def mcp_tools(self) -> list[Tool]:
-        return [Tool(**tool) for tool in json.loads(self.tools)]
+    def mcp_tools(self) -> list["MCPTool"]:
+        from core.mcp.types import Tool as MCPTool
+
+        return [MCPTool(**tool) for tool in json.loads(self.tools)]
 
     @property
     def provider_icon(self) -> dict[str, str] | str:
+        from core.file import helpers as file_helpers
+
         try:
             return cast(dict[str, str], json.loads(self.icon))
         except json.JSONDecodeError:
@@ -306,7 +322,7 @@ class MCPToolProvider(Base):
 
     @property
     def decrypted_server_url(self) -> str:
-        return cast(str, encrypter.decrypt_token(self.tenant_id, self.server_url))
+        return encrypter.decrypt_token(self.tenant_id, self.server_url)
 
     @property
     def masked_server_url(self) -> str:
@@ -325,12 +341,12 @@ class MCPToolProvider(Base):
         return mask_url(self.decrypted_server_url)
 
     @property
-    def decrypted_credentials(self) -> dict:
+    def decrypted_credentials(self) -> dict[str, Any]:
         from core.helper.provider_cache import NoOpProviderCredentialCache
         from core.tools.mcp_tool.provider import MCPToolProviderController
         from core.tools.utils.encryption import create_provider_encrypter
 
-        provider_controller = MCPToolProviderController._from_db(self)
+        provider_controller = MCPToolProviderController.from_db(self)
 
         encrypter, _ = create_provider_encrypter(
             tenant_id=self.tenant_id,
@@ -338,7 +354,7 @@ class MCPToolProvider(Base):
             cache=NoOpProviderCredentialCache(),
         )
 
-        return encrypter.decrypt(self.credentials)  # type: ignore
+        return encrypter.decrypt(self.credentials)
 
 
 class ToolModelInvoke(Base):
@@ -406,11 +422,11 @@ class ToolConversationVariables(Base):
     updated_at = mapped_column(sa.DateTime, nullable=False, server_default=func.current_timestamp())
 
     @property
-    def variables(self) -> Any:
+    def variables(self):
         return json.loads(self.variables_str)
 
 
-class ToolFile(Base):
+class ToolFile(TypeBase):
     """This table stores file metadata generated in workflows,
     not only files created by agent.
     """
@@ -421,19 +437,19 @@ class ToolFile(Base):
         sa.Index("tool_file_conversation_id_idx", "conversation_id"),
     )
 
-    id: Mapped[str] = mapped_column(StringUUID, server_default=sa.text("uuid_generate_v4()"))
+    id: Mapped[str] = mapped_column(StringUUID, server_default=sa.text("uuid_generate_v4()"), init=False)
     # conversation user id
     user_id: Mapped[str] = mapped_column(StringUUID)
     # tenant id
     tenant_id: Mapped[str] = mapped_column(StringUUID)
     # conversation id
-    conversation_id: Mapped[str] = mapped_column(StringUUID, nullable=True)
+    conversation_id: Mapped[Optional[str]] = mapped_column(StringUUID, nullable=True)
     # file key
     file_key: Mapped[str] = mapped_column(String(255), nullable=False)
     # mime type
     mimetype: Mapped[str] = mapped_column(String(255), nullable=False)
     # original url
-    original_url: Mapped[str] = mapped_column(String(2048), nullable=True)
+    original_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True, default=None)
     # name
     name: Mapped[str] = mapped_column(default="")
     # size
@@ -474,5 +490,7 @@ class DeprecatedPublishedAppTool(Base):
     updated_at = mapped_column(sa.DateTime, nullable=False, server_default=sa.text("CURRENT_TIMESTAMP(0)"))
 
     @property
-    def description_i18n(self) -> I18nObject:
+    def description_i18n(self) -> "I18nObject":
+        from core.tools.entities.common_entities import I18nObject
+
         return I18nObject(**json.loads(self.description))

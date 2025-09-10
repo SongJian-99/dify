@@ -48,6 +48,10 @@ type ProviderContextState = {
   enableEducationPlan: boolean
   isEducationWorkspace: boolean
   isEducationAccount: boolean
+  allowRefreshEducationVerify: boolean
+  educationAccountExpireAt: number | null
+  isLoadingEducationAccountInfo: boolean
+  isFetchingEducationAccountInfo: boolean
   webappCopyrightEnabled: boolean
   licenseLimit: {
     workspace_members: {
@@ -57,6 +61,7 @@ type ProviderContextState = {
   },
   refreshLicenseLimit: () => void
   isAllowTransferWorkspace: boolean
+  isAllowPublishAsKnowledgePipeline: boolean
 }
 const ProviderContext = createContext<ProviderContextState>({
   modelProviders: [],
@@ -90,6 +95,10 @@ const ProviderContext = createContext<ProviderContextState>({
   enableEducationPlan: false,
   isEducationWorkspace: false,
   isEducationAccount: false,
+  allowRefreshEducationVerify: false,
+  educationAccountExpireAt: null,
+  isLoadingEducationAccountInfo: false,
+  isFetchingEducationAccountInfo: false,
   webappCopyrightEnabled: false,
   licenseLimit: {
     workspace_members: {
@@ -99,6 +108,7 @@ const ProviderContext = createContext<ProviderContextState>({
   },
   refreshLicenseLimit: noop,
   isAllowTransferWorkspace: false,
+  isAllowPublishAsKnowledgePipeline: false,
 })
 
 export const useProviderContext = () => useContext(ProviderContext)
@@ -135,8 +145,9 @@ export const ProviderContextProvider = ({
 
   const [enableEducationPlan, setEnableEducationPlan] = useState(false)
   const [isEducationWorkspace, setIsEducationWorkspace] = useState(false)
-  const { data: isEducationAccount } = useEducationStatus(!enableEducationPlan)
+  const { data: educationAccountInfo, isLoading: isLoadingEducationAccountInfo, isFetching: isFetchingEducationAccountInfo } = useEducationStatus(!enableEducationPlan)
   const [isAllowTransferWorkspace, setIsAllowTransferWorkspace] = useState(false)
+  const [isAllowPublishAsKnowledgePipeline, setIsAllowPublishAsKnowledgePipeline] = useState(false)
 
   const fetchPlan = async () => {
     try {
@@ -167,6 +178,8 @@ export const ProviderContextProvider = ({
         setLicenseLimit({ workspace_members: data.workspace_members })
       if (data.is_allow_transfer_workspace)
         setIsAllowTransferWorkspace(data.is_allow_transfer_workspace)
+      if (data.knowledge_pipeline?.publish_enabled)
+        setIsAllowPublishAsKnowledgePipeline(data.knowledge_pipeline?.publish_enabled)
     }
     catch (error) {
       console.error('Failed to fetch plan info:', error)
@@ -223,11 +236,16 @@ export const ProviderContextProvider = ({
       datasetOperatorEnabled,
       enableEducationPlan,
       isEducationWorkspace,
-      isEducationAccount: isEducationAccount?.result || false,
+      isEducationAccount: educationAccountInfo?.is_student || false,
+      allowRefreshEducationVerify: educationAccountInfo?.allow_refresh || false,
+      educationAccountExpireAt: educationAccountInfo?.expire_at || null,
+      isLoadingEducationAccountInfo,
+      isFetchingEducationAccountInfo,
       webappCopyrightEnabled,
       licenseLimit,
       refreshLicenseLimit: fetchPlan,
       isAllowTransferWorkspace,
+      isAllowPublishAsKnowledgePipeline,
     }}>
       {children}
     </ProviderContext.Provider>

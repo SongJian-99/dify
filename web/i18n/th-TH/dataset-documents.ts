@@ -31,7 +31,6 @@ const translation = {
       sync: 'ซิงค์',
       pause: 'หยุด',
       resume: 'ดำเนิน',
-      download: 'ดาวน์โหลดไฟล์',
     },
     index: {
       enable: 'เปิด',
@@ -99,6 +98,9 @@ const translation = {
       upload_file: 'อัปโหลดไฟล์',
       notion: 'ซิงค์แบบฟอร์ม Notion',
       github: 'แบบฟอร์มซิงค์ Github',
+      online_document: 'เอกสารออนไลน์',
+      local_file: 'ไฟล์ท้องถิ่น',
+      website_crawl: 'รวบรวมข้อมูลเว็บไซต์',
     },
     type: {
       book: 'หนังสือ',
@@ -342,7 +344,6 @@ const translation = {
     keywords: 'คําสําคัญ',
     addKeyWord: 'เพิ่มคําสําคัญ',
     keywordError: 'ความยาวสูงสุดของคําหลักคือ 20',
-    characters: 'อักขระ',
     hitCount: 'จํานวนการดึงข้อมูล',
     vectorHash: 'แฮชเวกเตอร์:',
     questionPlaceholder: 'เพิ่มคําถามที่นี่',

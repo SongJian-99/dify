@@ -1,13 +1,13 @@
 import datetime
 import enum
-import re
 from collections.abc import Mapping
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, model_validator
-from werkzeug.exceptions import NotFound
+from packaging.version import InvalidVersion, Version
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from core.agent.plugin_entities import AgentStrategyProviderEntity
+from core.datasource.entities.datasource_entities import DatasourceProviderEntity
 from core.model_runtime.entities.provider_entities import ProviderEntity
 from core.plugin.entities.base import BasePluginEntity
 from core.plugin.entities.endpoint import EndpointProviderDeclaration
@@ -62,6 +62,7 @@ class PluginCategory(enum.StrEnum):
     Model = "model"
     Extension = "extension"
     AgentStrategy = "agent-strategy"
+    Datasource = "datasource"
 
 
 class PluginDeclaration(BaseModel):
@@ -69,12 +70,24 @@ class PluginDeclaration(BaseModel):
         tools: Optional[list[str]] = Field(default_factory=list[str])
         models: Optional[list[str]] = Field(default_factory=list[str])
         endpoints: Optional[list[str]] = Field(default_factory=list[str])
+        datasources: Optional[list[str]] = Field(default_factory=list[str])
 
     class Meta(BaseModel):
-        minimum_dify_version: Optional[str] = Field(default=None, pattern=r"^\d{1,4}(\.\d{1,4}){1,3}(-\w{1,16})?$")
+        minimum_dify_version: Optional[str] = Field(default=None)
         version: Optional[str] = Field(default=None)
 
-    version: str = Field(..., pattern=r"^\d{1,4}(\.\d{1,4}){1,3}(-\w{1,16})?$")
+        @field_validator("minimum_dify_version")
+        @classmethod
+        def validate_minimum_dify_version(cls, v: Optional[str]) -> Optional[str]:
+            if v is None:
+                return v
+            try:
+                Version(v)
+                return v
+            except InvalidVersion as e:
+                raise ValueError(f"Invalid version format: {v}") from e
+
+    version: str = Field(...)
     author: Optional[str] = Field(..., pattern=r"^[a-zA-Z0-9_-]{1,64}$")
     name: str = Field(..., pattern=r"^[a-z0-9_-]{1,128}$")
     description: I18nObject
@@ -92,16 +105,28 @@ class PluginDeclaration(BaseModel):
     model: Optional[ProviderEntity] = None
     endpoint: Optional[EndpointProviderDeclaration] = None
     agent_strategy: Optional[AgentStrategyProviderEntity] = None
+    datasource: Optional[DatasourceProviderEntity] = None
     meta: Meta
+
+    @field_validator("version")
+    @classmethod
+    def validate_version(cls, v: str) -> str:
+        try:
+            Version(v)
+            return v
+        except InvalidVersion as e:
+            raise ValueError(f"Invalid version format: {v}") from e
 
     @model_validator(mode="before")
     @classmethod
-    def validate_category(cls, values: dict) -> dict:
+    def validate_category(cls, values: dict):
         # auto detect category
         if values.get("tool"):
             values["category"] = PluginCategory.Tool
         elif values.get("model"):
             values["category"] = PluginCategory.Model
+        elif values.get("datasource"):
+            values["category"] = PluginCategory.Datasource
         elif values.get("agent_strategy"):
             values["category"] = PluginCategory.AgentStrategy
         else:
@@ -133,55 +158,6 @@ class PluginEntity(PluginInstallation):
         if self.declaration.tool:
             self.declaration.tool.plugin_id = self.plugin_id
         return self
-
-
-class GenericProviderID:
-    organization: str
-    plugin_name: str
-    provider_name: str
-    is_hardcoded: bool
-
-    def to_string(self) -> str:
-        return str(self)
-
-    def __str__(self) -> str:
-        return f"{self.organization}/{self.plugin_name}/{self.provider_name}"
-
-    def __init__(self, value: str, is_hardcoded: bool = False) -> None:
-        if not value:
-            raise NotFound("plugin not found, please add plugin")
-        # check if the value is a valid plugin id with format: $organization/$plugin_name/$provider_name
-        if not re.match(r"^[a-z0-9_-]+\/[a-z0-9_-]+\/[a-z0-9_-]+$", value):
-            # check if matches [a-z0-9_-]+, if yes, append with langgenius/$value/$value
-            if re.match(r"^[a-z0-9_-]+$", value):
-                value = f"langgenius/{value}/{value}"
-            else:
-                raise ValueError(f"Invalid plugin id {value}")
-
-        self.organization, self.plugin_name, self.provider_name = value.split("/")
-        self.is_hardcoded = is_hardcoded
-
-    def is_langgenius(self) -> bool:
-        return self.organization == "langgenius"
-
-    @property
-    def plugin_id(self) -> str:
-        return f"{self.organization}/{self.plugin_name}"
-
-
-class ModelProviderID(GenericProviderID):
-    def __init__(self, value: str, is_hardcoded: bool = False) -> None:
-        super().__init__(value, is_hardcoded)
-        if self.organization == "langgenius" and self.provider_name == "google":
-            self.plugin_name = "gemini"
-
-
-class ToolProviderID(GenericProviderID):
-    def __init__(self, value: str, is_hardcoded: bool = False) -> None:
-        super().__init__(value, is_hardcoded)
-        if self.organization == "langgenius":
-            if self.provider_name in ["jina", "siliconflow", "stepfun", "gitee_ai"]:
-                self.plugin_name = f"{self.provider_name}_tool"
 
 
 class PluginDependency(BaseModel):

@@ -1,18 +1,20 @@
 from collections.abc import Mapping, Sequence
-from enum import Enum
-from typing import Any, Optional
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+
+if TYPE_CHECKING:
+    from core.ops.ops_trace_manager import TraceQueueManager
 
 from constants import UUID_NIL
 from core.app.app_config.entities import EasyUIBasedAppConfig, WorkflowUIBasedAppConfig
 from core.entities.provider_configuration import ProviderModelBundle
 from core.file import File, FileUploadConfig
 from core.model_runtime.entities.model_entities import AIModelEntity
-from core.ops.ops_trace_manager import TraceQueueManager
 
 
-class InvokeFrom(Enum):
+class InvokeFrom(StrEnum):
     """
     Invoke From.
     """
@@ -36,6 +38,7 @@ class InvokeFrom(Enum):
     # DEBUGGER indicates that this invocation is from
     # the workflow (or chatflow) edit page.
     DEBUGGER = "debugger"
+    PUBLISHED = "published"
 
     @classmethod
     def value_of(cls, value: str):
@@ -114,7 +117,7 @@ class AppGenerateEntity(BaseModel):
     extras: dict[str, Any] = Field(default_factory=dict)
 
     # tracing instance
-    trace_manager: Optional[TraceQueueManager] = None
+    trace_manager: Optional["TraceQueueManager"] = None
 
 
 class EasyUIBasedAppGenerateEntity(AppGenerateEntity):
@@ -240,3 +243,53 @@ class WorkflowAppGenerateEntity(AppGenerateEntity):
         inputs: dict
 
     single_loop_run: Optional[SingleLoopRunEntity] = None
+
+
+class RagPipelineGenerateEntity(WorkflowAppGenerateEntity):
+    """
+    RAG Pipeline Application Generate Entity.
+    """
+
+    # pipeline config
+    pipeline_config: WorkflowUIBasedAppConfig
+    datasource_type: str
+    datasource_info: Mapping[str, Any]
+    dataset_id: str
+    batch: str
+    document_id: Optional[str] = None
+    start_node_id: Optional[str] = None
+
+    class SingleIterationRunEntity(BaseModel):
+        """
+        Single Iteration Run Entity.
+        """
+
+        node_id: str
+        inputs: dict
+
+    single_iteration_run: Optional[SingleIterationRunEntity] = None
+
+    class SingleLoopRunEntity(BaseModel):
+        """
+        Single Loop Run Entity.
+        """
+
+        node_id: str
+        inputs: dict
+
+    single_loop_run: Optional[SingleLoopRunEntity] = None
+
+
+# Import TraceQueueManager at runtime to resolve forward references
+from core.ops.ops_trace_manager import TraceQueueManager
+
+# Rebuild models that use forward references
+AppGenerateEntity.model_rebuild()
+EasyUIBasedAppGenerateEntity.model_rebuild()
+ConversationAppGenerateEntity.model_rebuild()
+ChatAppGenerateEntity.model_rebuild()
+CompletionAppGenerateEntity.model_rebuild()
+AgentChatAppGenerateEntity.model_rebuild()
+AdvancedChatAppGenerateEntity.model_rebuild()
+WorkflowAppGenerateEntity.model_rebuild()
+RagPipelineGenerateEntity.model_rebuild()

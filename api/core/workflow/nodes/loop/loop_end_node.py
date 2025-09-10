@@ -1,24 +1,23 @@
 from collections.abc import Mapping
 from typing import Any, Optional
 
-from core.workflow.entities.node_entities import NodeRunResult
-from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
-from core.workflow.nodes.base import BaseNode
+from core.workflow.enums import ErrorStrategy, NodeType, WorkflowNodeExecutionStatus
+from core.workflow.node_events import NodeRunResult
 from core.workflow.nodes.base.entities import BaseNodeData, RetryConfig
-from core.workflow.nodes.enums import ErrorStrategy, NodeType
+from core.workflow.nodes.base.node import Node
 from core.workflow.nodes.loop.entities import LoopEndNodeData
 
 
-class LoopEndNode(BaseNode):
+class LoopEndNode(Node):
     """
     Loop End Node.
     """
 
-    _node_type = NodeType.LOOP_END
+    node_type = NodeType.LOOP_END
 
     _node_data: LoopEndNodeData
 
-    def init_node_data(self, data: Mapping[str, Any]) -> None:
+    def init_node_data(self, data: Mapping[str, Any]):
         self._node_data = LoopEndNodeData(**data)
 
     def _get_error_strategy(self) -> Optional[ErrorStrategy]:

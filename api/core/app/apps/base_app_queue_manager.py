@@ -1,7 +1,7 @@
 import queue
 import time
 from abc import abstractmethod
-from enum import Enum
+from enum import IntEnum, auto
 from typing import Any, Optional
 
 from sqlalchemy.orm import DeclarativeMeta
@@ -19,13 +19,13 @@ from core.app.entities.queue_entities import (
 from extensions.ext_redis import redis_client
 
 
-class PublishFrom(Enum):
-    APPLICATION_MANAGER = 1
-    TASK_PIPELINE = 2
+class PublishFrom(IntEnum):
+    APPLICATION_MANAGER = auto()
+    TASK_PIPELINE = auto()
 
 
 class AppQueueManager:
-    def __init__(self, task_id: str, user_id: str, invoke_from: InvokeFrom) -> None:
+    def __init__(self, task_id: str, user_id: str, invoke_from: InvokeFrom):
         if not user_id:
             raise ValueError("user is required")
 
@@ -73,14 +73,14 @@ class AppQueueManager:
                     self.publish(QueuePingEvent(), PublishFrom.TASK_PIPELINE)
                     last_ping_time = elapsed_time // 10
 
-    def stop_listen(self) -> None:
+    def stop_listen(self):
         """
         Stop listen to queue
         :return:
         """
         self._q.put(None)
 
-    def publish_error(self, e, pub_from: PublishFrom) -> None:
+    def publish_error(self, e, pub_from: PublishFrom):
         """
         Publish error
         :param e: error
@@ -89,7 +89,7 @@ class AppQueueManager:
         """
         self.publish(QueueErrorEvent(error=e), pub_from)
 
-    def publish(self, event: AppQueueEvent, pub_from: PublishFrom) -> None:
+    def publish(self, event: AppQueueEvent, pub_from: PublishFrom):
         """
         Publish event to queue
         :param event:
@@ -100,7 +100,7 @@ class AppQueueManager:
         self._publish(event, pub_from)
 
     @abstractmethod
-    def _publish(self, event: AppQueueEvent, pub_from: PublishFrom) -> None:
+    def _publish(self, event: AppQueueEvent, pub_from: PublishFrom):
         """
         Publish event to queue
         :param event:
@@ -110,7 +110,7 @@ class AppQueueManager:
         raise NotImplementedError
 
     @classmethod
-    def set_stop_flag(cls, task_id: str, invoke_from: InvokeFrom, user_id: str) -> None:
+    def set_stop_flag(cls, task_id: str, invoke_from: InvokeFrom, user_id: str):
         """
         Set task stop flag
         :return:
@@ -121,6 +121,21 @@ class AppQueueManager:
 
         user_prefix = "account" if invoke_from in {InvokeFrom.EXPLORE, InvokeFrom.DEBUGGER} else "end-user"
         if result.decode("utf-8") != f"{user_prefix}-{user_id}":
+            return
+
+        stopped_cache_key = cls._generate_stopped_cache_key(task_id)
+        redis_client.setex(stopped_cache_key, 600, 1)
+
+    @classmethod
+    def set_stop_flag_no_user_check(cls, task_id: str) -> None:
+        """
+        Set task stop flag without user permission check.
+        This method allows stopping workflows without user context.
+
+        :param task_id: The task ID to stop
+        :return:
+        """
+        if not task_id:
             return
 
         stopped_cache_key = cls._generate_stopped_cache_key(task_id)
@@ -159,7 +174,7 @@ class AppQueueManager:
     def _check_for_sqlalchemy_models(self, data: Any):
         # from entity to dict or list
         if isinstance(data, dict):
-            for key, value in data.items():
+            for value in data.values():
                 self._check_for_sqlalchemy_models(value)
         elif isinstance(data, list):
             for item in data:

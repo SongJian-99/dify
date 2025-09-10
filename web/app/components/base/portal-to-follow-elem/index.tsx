@@ -1,12 +1,14 @@
 'use client'
-import React from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import {
   FloatingPortal,
   autoUpdate,
   flip,
+  hide,
   offset,
   shift,
   size,
+  useClick,
   useDismiss,
   useFloating,
   useFocus,
@@ -29,30 +31,46 @@ export type PortalToFollowElemOptions = {
   offset?: number | OffsetOptions
   onOpenChange?: (open: boolean) => void
   triggerPopupSameWidth?: boolean
+  customContainer?: HTMLElement | null
 }
 
 export function usePortalToFollowElem({
   placement = 'bottom',
-  open,
+  open: controlledOpen,
   offset: offsetValue = 0,
   onOpenChange: setControlledOpen,
   triggerPopupSameWidth,
+  customContainer = null,
 }: PortalToFollowElemOptions = {}) {
-  const setOpen = setControlledOpen
+  const container = customContainer || document.getElementById('workflow-container') || document.body
+  const [localOpen, setLocalOpen] = useState(false)
+  const open = controlledOpen ?? localOpen
+  const handleOpenChange = useCallback((newOpen: boolean) => {
+    setLocalOpen(newOpen)
+    setControlledOpen?.(newOpen)
+  }, [setControlledOpen, setLocalOpen])
 
   const data = useFloating({
     placement,
     open,
-    onOpenChange: setOpen,
+    onOpenChange: handleOpenChange,
     whileElementsMounted: autoUpdate,
     middleware: [
       offset(offsetValue),
       flip({
         crossAxis: placement.includes('-'),
         fallbackAxisSideDirection: 'start',
-        padding: 5,
+        padding: 8,
       }),
-      shift({ padding: 5 }),
+      shift({
+        padding: 8,
+        boundary: container,
+        altBoundary: true,
+      }),
+      hide({
+        // hide when the reference element is not visible
+        boundary: container,
+      }),
       size({
         apply({ rects, elements }) {
           if (triggerPopupSameWidth)
@@ -74,16 +92,25 @@ export function usePortalToFollowElem({
   const dismiss = useDismiss(context)
   const role = useRole(context, { role: 'tooltip' })
 
-  const interactions = useInteractions([hover, focus, dismiss, role])
+  const click = useClick(context)
+
+  const interactionsArray = useMemo(() => {
+    const result = [hover, focus, dismiss, role]
+
+    if (!setControlledOpen)
+      result.push(click)
+    return result
+  }, [setControlledOpen, hover, focus, dismiss, role, click])
+  const interactions = useInteractions(interactionsArray)
 
   return React.useMemo(
     () => ({
       open,
-      setOpen,
+      setOpen: handleOpenChange,
       ...interactions,
       ...data,
     }),
-    [open, setOpen, interactions, data],
+    [open, handleOpenChange, interactions, data],
   )
 }
 
@@ -133,9 +160,9 @@ export const PortalToFollowElemTrigger = (
       context.getReferenceProps({
         ref,
         ...props,
-        ...children.props,
+        ...(children.props || {}),
         'data-state': context.open ? 'open' : 'closed',
-      }),
+      } as React.HTMLProps<HTMLElement>),
     )
   }
 
@@ -177,6 +204,7 @@ export const PortalToFollowElemContent = (
         style={{
           ...context.floatingStyles,
           ...style,
+          visibility: context.middlewareData.hide?.referenceHidden ? 'hidden' : 'visible',
         }}
         {...context.getFloatingProps(props)}
       />

@@ -32,7 +32,6 @@ const translation = {
       sync: '同期',
       pause: '一時停止',
       resume: '再開',
-      download: 'ファイルをダウンロード',
     },
     index: {
       enable: '有効にする',
@@ -100,6 +99,9 @@ const translation = {
       upload_file: 'ファイルをアップロード',
       notion: 'Notion から同期',
       github: 'GitHub から同期',
+      website_crawl: 'ウェブサイトクロール',
+      online_document: 'オンライン文書',
+      local_file: 'ローカルファイル',
     },
     type: {
       book: '書籍',

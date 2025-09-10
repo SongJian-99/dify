@@ -6,6 +6,7 @@ const translation = {
     extensions: 'एक्सटेंशन्स',
     tools: 'उपकरण',
     agents: 'एजेंट रणनीतियाँ',
+    datasources: 'डेटा स्रोत',
   },
   categorySingle: {
     extension: 'विस्तार',
@@ -13,6 +14,7 @@ const translation = {
     tool: 'उपकरण',
     agent: 'एजेंट रणनीति',
     model: 'मॉडल',
+    datasource: 'डेटा स्रोत',
   },
   list: {
     source: {
@@ -246,6 +248,11 @@ const translation = {
     authorization: 'अधिकार',
     useApiAuthDesc: 'क्रेडेंशियल्स कॉन्फ़िगर करने के बाद, कार्यक्षेत्र के सभी सदस्यों को एप्लिकेशन को व्यवस्थित करते समय इस उपकरण का उपयोग करने की अनुमति होती है।',
     clientInfo: 'चूंकि इस टूल प्रदाता के लिए कोई सिस्टम क्लाइंट रहस्य नहीं पाए गए हैं, इसलिए इसे मैन्युअल रूप से सेटअप करना आवश्यक है, कृपया redirect_uri का उपयोग करें',
+    unavailable: 'अप्राप्त',
+    customCredentialUnavailable: 'कस्टम क्रेडेंशियल वर्तमान में उपलब्ध नहीं हैं',
+    credentialUnavailable: 'वर्तमान में क्रेडेंशियल्स उपलब्ध नहीं हैं। कृपया प्रशासन से संपर्क करें।',
+    connectedWorkspace: 'संयुक्त कार्यक्षेत्र',
+    emptyAuth: 'कृपया प्रमाणीकरण कॉन्फ़िगर करें',
   },
   deprecated: 'अनुशंसित नहीं',
   autoUpdate: {

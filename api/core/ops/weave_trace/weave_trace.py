@@ -23,8 +23,7 @@ from core.ops.entities.trace_entity import (
 )
 from core.ops.weave_trace.entities.weave_trace_entity import WeaveTraceModel
 from core.repositories import DifyCoreRepositoryFactory
-from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionMetadataKey
-from core.workflow.nodes.enums import NodeType
+from core.workflow.enums import NodeType, WorkflowNodeExecutionMetadataKey
 from extensions.ext_database import db
 from models import EndUser, MessageFile, WorkflowNodeExecutionTriggeredFrom
 
@@ -120,7 +119,7 @@ class WeaveDataTrace(BaseTraceInstance):
         workflow_attributes["trace_id"] = trace_id
         workflow_attributes["start_time"] = trace_info.start_time
         workflow_attributes["end_time"] = trace_info.end_time
-        workflow_attributes["tags"] = ["workflow"]
+        workflow_attributes["tags"] = ["dify_workflow"]
 
         workflow_run = WeaveTraceModel(
             file_list=trace_info.file_list,
@@ -155,6 +154,9 @@ class WeaveDataTrace(BaseTraceInstance):
         workflow_node_executions = workflow_node_execution_repository.get_by_workflow_run(
             workflow_run_id=trace_info.workflow_run_id
         )
+
+        # rearrange workflow_node_executions by starting time
+        workflow_node_executions = sorted(workflow_node_executions, key=lambda x: x.created_at)
 
         for node_execution in workflow_node_executions:
             node_execution_id = node_execution.id

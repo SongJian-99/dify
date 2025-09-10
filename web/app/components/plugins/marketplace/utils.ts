@@ -45,7 +45,7 @@ export const getPluginDetailLinkInMarketplace = (plugin: Plugin) => {
 }
 
 export const getMarketplacePluginsByCollectionId = async (collectionId: string, query?: CollectionsAndPluginsSearchParams) => {
-  let plugins = [] as Plugin[]
+  let plugins: Plugin[]
 
   try {
     const url = `${MARKETPLACE_API_PREFIX}/collections/${collectionId}/plugins`
@@ -116,6 +116,9 @@ export const getMarketplaceListCondition = (pluginType: string) => {
 
   if (pluginType === PluginType.extension)
     return 'category=endpoint'
+
+  if (pluginType === PluginType.datasource)
+    return 'category=datasource'
 
   if (pluginType === 'bundle')
     return 'type=bundle'

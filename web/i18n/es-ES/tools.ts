@@ -191,6 +191,8 @@ const translation = {
       cancel: 'Cancelar',
       save: 'Guardar',
       confirm: 'Añadir y Autorizar',
+      sseReadTimeout: 'Tiempo de espera de lectura SSE',
+      timeout: 'Tiempo de espera',
     },
     delete: 'Eliminar servidor MCP',
     deleteConfirmTitle: '¿Eliminar {{mcp}}?',
@@ -232,6 +234,7 @@ const translation = {
       publishTip: 'App no publicada. Publícala primero.',
     },
   },
+  allTools: 'Todas las herramientas',
 }
 
 export default translation

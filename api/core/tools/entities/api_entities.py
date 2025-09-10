@@ -49,7 +49,7 @@ class ToolProviderApiEntity(BaseModel):
     def convert_none_to_empty_list(cls, v):
         return v if v is not None else []
 
-    def to_dict(self) -> dict:
+    def to_dict(self):
         # -------------
         # overwrite tool parameter types for temp fix
         tools = jsonable_encoder(self.tools)
@@ -62,7 +62,7 @@ class ToolProviderApiEntity(BaseModel):
                         parameter.pop("input_schema", None)
         # -------------
         optional_fields = self.optional_field("server_url", self.server_url)
-        if self.type == ToolProviderType.MCP.value:
+        if self.type == ToolProviderType.MCP:
             optional_fields.update(self.optional_field("updated_at", self.updated_at))
             optional_fields.update(self.optional_field("server_identifier", self.server_identifier))
         return {
@@ -84,7 +84,7 @@ class ToolProviderApiEntity(BaseModel):
             **optional_fields,
         }
 
-    def optional_field(self, key: str, value: Any) -> dict:
+    def optional_field(self, key: str, value: Any):
         """Return dict with key-value if value is truthy, empty dict otherwise."""
         return {key: value} if value else {}
 

@@ -191,6 +191,8 @@ const translation = {
       cancel: 'Abbrechen',
       save: 'Speichern',
       confirm: 'Hinzufügen & Autorisieren',
+      sseReadTimeout: 'SSE-Lesezeitüberschreitung',
+      timeout: 'Zeitüberschreitung',
     },
     delete: 'MCP-Server entfernen',
     deleteConfirmTitle: 'Möchten Sie {{mcp}} entfernen?',
@@ -232,6 +234,7 @@ const translation = {
       publishTip: 'App nicht veröffentlicht. Bitte zuerst die App veröffentlichen.',
     },
   },
+  allTools: 'Alle Werkzeuge',
 }
 
 export default translation

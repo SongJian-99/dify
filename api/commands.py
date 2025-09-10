@@ -9,15 +9,17 @@ import sqlalchemy as sa
 from flask import current_app
 from pydantic import TypeAdapter
 from sqlalchemy import select
-from werkzeug.exceptions import NotFound
+from sqlalchemy.exc import SQLAlchemyError
 
 from configs import dify_config
 from constants.languages import languages
-from core.plugin.entities.plugin import ToolProviderID
+from core.helper import encrypter
+from core.plugin.impl.plugin import PluginInstaller
 from core.rag.datasource.vdb.vector_factory import Vector
 from core.rag.datasource.vdb.vector_type import VectorType
 from core.rag.index_processor.constant.built_in_field import BuiltInField
 from core.rag.models.document import Document
+from core.tools.entities.tool_entities import CredentialType
 from core.tools.utils.system_oauth_encryption import encrypt_system_oauth_params
 from events.app_event import app_was_created
 from extensions.ext_database import db
@@ -30,12 +32,19 @@ from models import Tenant
 from models.dataset import Dataset, DatasetCollectionBinding, DatasetMetadata, DatasetMetadataBinding, DocumentSegment
 from models.dataset import Document as DatasetDocument
 from models.model import Account, App, AppAnnotationSetting, AppMode, Conversation, MessageAnnotation
+from models.oauth import DatasourceOauthParamConfig, DatasourceProvider
 from models.provider import Provider, ProviderModel
+from models.provider_ids import DatasourceProviderID, ToolProviderID
+from models.source import DataSourceApiKeyAuthBinding, DataSourceOauthBinding
 from models.tools import ToolOAuthSystemClient
 from services.account_service import AccountService, RegisterService, TenantService
 from services.clear_free_plan_tenant_expired_logs import ClearFreePlanTenantExpiredLogs
 from services.plugin.data_migration import PluginDataMigration
 from services.plugin.plugin_migration import PluginMigration
+from services.plugin.plugin_service import PluginService
+from tasks.remove_app_and_related_data_task import delete_draft_variables_batch
+
+logger = logging.getLogger(__name__)
 
 
 @click.command("reset-password", help="Reset the account password.")
@@ -181,8 +190,8 @@ def migrate_annotation_vector_database():
             )
             if not apps:
                 break
-        except NotFound:
-            break
+        except SQLAlchemyError:
+            raise
 
         page += 1
         for app in apps:
@@ -308,8 +317,8 @@ def migrate_knowledge_vector_database():
             )
 
             datasets = db.paginate(select=stmt, page=page, per_page=50, max_per_page=50, error_out=False)
-        except NotFound:
-            break
+        except SQLAlchemyError:
+            raise
 
         page += 1
         for dataset in datasets:
@@ -561,14 +570,14 @@ def old_metadata_migration():
                 .order_by(DatasetDocument.created_at.desc())
             )
             documents = db.paginate(select=stmt, page=page, per_page=50, max_per_page=50, error_out=False)
-        except NotFound:
-            break
+        except SQLAlchemyError:
+            raise
         if not documents:
             break
         for document in documents:
             if document.doc_metadata:
                 doc_metadata = document.doc_metadata
-                for key, value in doc_metadata.items():
+                for key in doc_metadata:
                     for field in BuiltInField:
                         if field.value == key:
                             break
@@ -684,7 +693,7 @@ def upgrade_db():
             click.echo(click.style("Database migration successful!", fg="green"))
 
         except Exception:
-            logging.exception("Failed to execute database migration")
+            logger.exception("Failed to execute database migration")
         finally:
             lock.release()
     else:
@@ -732,7 +741,7 @@ where sites.id is null limit 1000"""
                 except Exception:
                     failed_app_ids.append(app_id)
                     click.echo(click.style(f"Failed to fix missing site for app {app_id}", fg="red"))
-                    logging.exception("Failed to fix app related site missing issue, app_id: %s", app_id)
+                    logger.exception("Failed to fix app related site missing issue, app_id: %s", app_id)
                     continue
 
             if not processed_count:
@@ -1202,3 +1211,377 @@ def setup_system_tool_oauth_client(provider, client_params):
     db.session.add(oauth_client)
     db.session.commit()
     click.echo(click.style(f"OAuth client params setup successfully. id: {oauth_client.id}", fg="green"))
+
+
+def _find_orphaned_draft_variables(batch_size: int = 1000) -> list[str]:
+    """
+    Find draft variables that reference non-existent apps.
+
+    Args:
+        batch_size: Maximum number of orphaned app IDs to return
+
+    Returns:
+        List of app IDs that have draft variables but don't exist in the apps table
+    """
+    query = """
+        SELECT DISTINCT wdv.app_id
+        FROM workflow_draft_variables AS wdv
+        WHERE NOT EXISTS(
+            SELECT 1 FROM apps WHERE apps.id = wdv.app_id
+        )
+        LIMIT :batch_size
+    """
+
+    with db.engine.connect() as conn:
+        result = conn.execute(sa.text(query), {"batch_size": batch_size})
+        return [row[0] for row in result]
+
+
+def _count_orphaned_draft_variables() -> dict[str, Any]:
+    """
+    Count orphaned draft variables by app, including associated file counts.
+
+    Returns:
+        Dictionary with statistics about orphaned variables and files
+    """
+    # Count orphaned variables by app
+    variables_query = """
+        SELECT
+            wdv.app_id,
+            COUNT(*) as variable_count,
+            COUNT(wdv.file_id) as file_count
+        FROM workflow_draft_variables AS wdv
+        WHERE NOT EXISTS(
+            SELECT 1 FROM apps WHERE apps.id = wdv.app_id
+        )
+        GROUP BY wdv.app_id
+        ORDER BY variable_count DESC
+    """
+
+    with db.engine.connect() as conn:
+        result = conn.execute(sa.text(variables_query))
+        orphaned_by_app = {}
+        total_files = 0
+
+        for row in result:
+            app_id, variable_count, file_count = row
+            orphaned_by_app[app_id] = {"variables": variable_count, "files": file_count}
+            total_files += file_count
+
+        total_orphaned = sum(app_data["variables"] for app_data in orphaned_by_app.values())
+        app_count = len(orphaned_by_app)
+
+        return {
+            "total_orphaned_variables": total_orphaned,
+            "total_orphaned_files": total_files,
+            "orphaned_app_count": app_count,
+            "orphaned_by_app": orphaned_by_app,
+        }
+
+
+@click.command()
+@click.option("--dry-run", is_flag=True, help="Show what would be deleted without actually deleting")
+@click.option("--batch-size", default=1000, help="Number of records to process per batch (default 1000)")
+@click.option("--max-apps", default=None, type=int, help="Maximum number of apps to process (default: no limit)")
+@click.option("-f", "--force", is_flag=True, help="Skip user confirmation and force the command to execute.")
+def cleanup_orphaned_draft_variables(
+    dry_run: bool,
+    batch_size: int,
+    max_apps: int | None,
+    force: bool = False,
+):
+    """
+    Clean up orphaned draft variables from the database.
+
+    This script finds and removes draft variables that belong to apps
+    that no longer exist in the database.
+    """
+    logger = logging.getLogger(__name__)
+
+    # Get statistics
+    stats = _count_orphaned_draft_variables()
+
+    logger.info("Found %s orphaned draft variables", stats["total_orphaned_variables"])
+    logger.info("Found %s associated offload files", stats["total_orphaned_files"])
+    logger.info("Across %s non-existent apps", stats["orphaned_app_count"])
+
+    if stats["total_orphaned_variables"] == 0:
+        logger.info("No orphaned draft variables found. Exiting.")
+        return
+
+    if dry_run:
+        logger.info("DRY RUN: Would delete the following:")
+        for app_id, data in sorted(stats["orphaned_by_app"].items(), key=lambda x: x[1]["variables"], reverse=True)[
+            :10
+        ]:  # Show top 10
+            logger.info("  App %s: %s variables, %s files", app_id, data["variables"], data["files"])
+        if len(stats["orphaned_by_app"]) > 10:
+            logger.info("  ... and %s more apps", len(stats["orphaned_by_app"]) - 10)
+        return
+
+    # Confirm deletion
+    if not force:
+        click.confirm(
+            f"Are you sure you want to delete {stats['total_orphaned_variables']} "
+            f"orphaned draft variables and {stats['total_orphaned_files']} associated files "
+            f"from {stats['orphaned_app_count']} apps?",
+            abort=True,
+        )
+
+    total_deleted = 0
+    processed_apps = 0
+
+    while True:
+        if max_apps and processed_apps >= max_apps:
+            logger.info("Reached maximum app limit (%s). Stopping.", max_apps)
+            break
+
+        orphaned_app_ids = _find_orphaned_draft_variables(batch_size=10)
+        if not orphaned_app_ids:
+            logger.info("No more orphaned draft variables found.")
+            break
+
+        for app_id in orphaned_app_ids:
+            if max_apps and processed_apps >= max_apps:
+                break
+
+            try:
+                deleted_count = delete_draft_variables_batch(app_id, batch_size)
+                total_deleted += deleted_count
+                processed_apps += 1
+
+                logger.info("Deleted %s variables for app %s", deleted_count, app_id)
+
+            except Exception:
+                logger.exception("Error processing app %s", app_id)
+                continue
+
+    logger.info("Cleanup completed. Total deleted: %s variables across %s apps", total_deleted, processed_apps)
+
+
+@click.command("setup-datasource-oauth-client", help="Setup datasource oauth client.")
+@click.option("--provider", prompt=True, help="Provider name")
+@click.option("--client-params", prompt=True, help="Client Params")
+def setup_datasource_oauth_client(provider, client_params):
+    """
+    Setup datasource oauth client
+    """
+    provider_id = DatasourceProviderID(provider)
+    provider_name = provider_id.provider_name
+    plugin_id = provider_id.plugin_id
+
+    try:
+        # json validate
+        click.echo(click.style(f"Validating client params: {client_params}", fg="yellow"))
+        client_params_dict = TypeAdapter(dict[str, Any]).validate_json(client_params)
+        click.echo(click.style("Client params validated successfully.", fg="green"))
+    except Exception as e:
+        click.echo(click.style(f"Error parsing client params: {str(e)}", fg="red"))
+        return
+
+    click.echo(click.style(f"Ready to delete existing oauth client params: {provider_name}", fg="yellow"))
+    deleted_count = (
+        db.session.query(DatasourceOauthParamConfig)
+        .filter_by(
+            provider=provider_name,
+            plugin_id=plugin_id,
+        )
+        .delete()
+    )
+    if deleted_count > 0:
+        click.echo(click.style(f"Deleted {deleted_count} existing oauth client params.", fg="yellow"))
+
+    click.echo(click.style(f"Ready to setup datasource oauth client: {provider_name}", fg="yellow"))
+    oauth_client = DatasourceOauthParamConfig(
+        provider=provider_name,
+        plugin_id=plugin_id,
+        system_credentials=client_params_dict,
+    )
+    db.session.add(oauth_client)
+    db.session.commit()
+    click.echo(click.style(f"provider: {provider_name}", fg="green"))
+    click.echo(click.style(f"plugin_id: {plugin_id}", fg="green"))
+    click.echo(click.style(f"params: {json.dumps(client_params_dict, indent=2, ensure_ascii=False)}", fg="green"))
+    click.echo(click.style(f"Datasource oauth client setup successfully. id: {oauth_client.id}", fg="green"))
+
+
+@click.command("transform-datasource-credentials", help="Transform datasource credentials.")
+def transform_datasource_credentials():
+    """
+    Transform datasource credentials
+    """
+    try:
+        installer_manager = PluginInstaller()
+        plugin_migration = PluginMigration()
+
+        notion_plugin_id = "langgenius/notion_datasource"
+        firecrawl_plugin_id = "langgenius/firecrawl_datasource"
+        jina_plugin_id = "langgenius/jina_datasource"
+        notion_plugin_unique_identifier = plugin_migration._fetch_plugin_unique_identifier(notion_plugin_id)
+        firecrawl_plugin_unique_identifier = plugin_migration._fetch_plugin_unique_identifier(firecrawl_plugin_id)
+        jina_plugin_unique_identifier = plugin_migration._fetch_plugin_unique_identifier(jina_plugin_id)
+        oauth_credential_type = CredentialType.OAUTH2
+        api_key_credential_type = CredentialType.API_KEY
+
+        # deal notion credentials
+        deal_notion_count = 0
+        notion_credentials = db.session.query(DataSourceOauthBinding).filter_by(provider="notion").all()
+        if notion_credentials:
+            notion_credentials_tenant_mapping: dict[str, list[DataSourceOauthBinding]] = {}
+            for credential in notion_credentials:
+                tenant_id = credential.tenant_id
+                if tenant_id not in notion_credentials_tenant_mapping:
+                    notion_credentials_tenant_mapping[tenant_id] = []
+                notion_credentials_tenant_mapping[tenant_id].append(credential)
+            for tenant_id, credentials in notion_credentials_tenant_mapping.items():
+                # check notion plugin is installed
+                installed_plugins = installer_manager.list_plugins(tenant_id)
+                installed_plugins_ids = [plugin.plugin_id for plugin in installed_plugins]
+                if notion_plugin_id not in installed_plugins_ids:
+                    if notion_plugin_unique_identifier:
+                        # install notion plugin
+                        PluginService.install_from_marketplace_pkg(tenant_id, [notion_plugin_unique_identifier])
+                auth_count = 0
+                for credential in credentials:
+                    auth_count += 1
+                    # get credential oauth params
+                    access_token = credential.access_token
+                    # notion info
+                    notion_info = credential.source_info
+                    workspace_id = notion_info.get("workspace_id")
+                    workspace_name = notion_info.get("workspace_name")
+                    workspace_icon = notion_info.get("workspace_icon")
+                    new_credentials = {
+                        "integration_secret": encrypter.encrypt_token(tenant_id, access_token),
+                        "workspace_id": workspace_id,
+                        "workspace_name": workspace_name,
+                        "workspace_icon": workspace_icon,
+                    }
+                    datasource_provider = DatasourceProvider(
+                        provider="notion_datasource",
+                        tenant_id=tenant_id,
+                        plugin_id=notion_plugin_id,
+                        auth_type=oauth_credential_type.value,
+                        encrypted_credentials=new_credentials,
+                        name=f"Auth {auth_count}",
+                        avatar_url=workspace_icon or "default",
+                        is_default=False,
+                    )
+                    db.session.add(datasource_provider)
+                    deal_notion_count += 1
+                db.session.commit()
+        # deal firecrawl credentials
+        deal_firecrawl_count = 0
+        firecrawl_credentials = db.session.query(DataSourceApiKeyAuthBinding).filter_by(provider="firecrawl").all()
+        if firecrawl_credentials:
+            firecrawl_credentials_tenant_mapping: dict[str, list[DataSourceApiKeyAuthBinding]] = {}
+            for credential in firecrawl_credentials:
+                tenant_id = credential.tenant_id
+                if tenant_id not in firecrawl_credentials_tenant_mapping:
+                    firecrawl_credentials_tenant_mapping[tenant_id] = []
+                firecrawl_credentials_tenant_mapping[tenant_id].append(credential)
+            for tenant_id, credentials in firecrawl_credentials_tenant_mapping.items():
+                # check firecrawl plugin is installed
+                installed_plugins = installer_manager.list_plugins(tenant_id)
+                installed_plugins_ids = [plugin.plugin_id for plugin in installed_plugins]
+                if firecrawl_plugin_id not in installed_plugins_ids:
+                    if firecrawl_plugin_unique_identifier:
+                        # install firecrawl plugin
+                        PluginService.install_from_marketplace_pkg(tenant_id, [firecrawl_plugin_unique_identifier])
+
+                auth_count = 0
+                for credential in credentials:
+                    auth_count += 1
+                    # get credential api key
+                    credentials_json = json.loads(credential.credentials)
+                    api_key = credentials_json.get("config", {}).get("api_key")
+                    base_url = credentials_json.get("config", {}).get("base_url")
+                    new_credentials = {
+                        "firecrawl_api_key": api_key,
+                        "base_url": base_url,
+                    }
+                    datasource_provider = DatasourceProvider(
+                        provider="firecrawl",
+                        tenant_id=tenant_id,
+                        plugin_id=firecrawl_plugin_id,
+                        auth_type=api_key_credential_type.value,
+                        encrypted_credentials=new_credentials,
+                        name=f"Auth {auth_count}",
+                        avatar_url="default",
+                        is_default=False,
+                    )
+                    db.session.add(datasource_provider)
+                    deal_firecrawl_count += 1
+                db.session.commit()
+        # deal jina credentials
+        deal_jina_count = 0
+        jina_credentials = db.session.query(DataSourceApiKeyAuthBinding).filter_by(provider="jinareader").all()
+        if jina_credentials:
+            jina_credentials_tenant_mapping: dict[str, list[DataSourceApiKeyAuthBinding]] = {}
+            for credential in jina_credentials:
+                tenant_id = credential.tenant_id
+                if tenant_id not in jina_credentials_tenant_mapping:
+                    jina_credentials_tenant_mapping[tenant_id] = []
+                jina_credentials_tenant_mapping[tenant_id].append(credential)
+            for tenant_id, credentials in jina_credentials_tenant_mapping.items():
+                # check jina plugin is installed
+                installed_plugins = installer_manager.list_plugins(tenant_id)
+                installed_plugins_ids = [plugin.plugin_id for plugin in installed_plugins]
+                if jina_plugin_id not in installed_plugins_ids:
+                    if jina_plugin_unique_identifier:
+                        # install jina plugin
+                        print(jina_plugin_unique_identifier)
+                        PluginService.install_from_marketplace_pkg(tenant_id, [jina_plugin_unique_identifier])
+
+                auth_count = 0
+                for credential in credentials:
+                    auth_count += 1
+                    # get credential api key
+                    credentials_json = json.loads(credential.credentials)
+                    api_key = credentials_json.get("config", {}).get("api_key")
+                    new_credentials = {
+                        "integration_secret": api_key,
+                    }
+                    datasource_provider = DatasourceProvider(
+                        provider="jina",
+                        tenant_id=tenant_id,
+                        plugin_id=jina_plugin_id,
+                        auth_type=api_key_credential_type.value,
+                        encrypted_credentials=new_credentials,
+                        name=f"Auth {auth_count}",
+                        avatar_url="default",
+                        is_default=False,
+                    )
+                    db.session.add(datasource_provider)
+                    deal_jina_count += 1
+                db.session.commit()
+    except Exception as e:
+        click.echo(click.style(f"Error parsing client params: {str(e)}", fg="red"))
+        return
+    click.echo(click.style(f"Transforming notion successfully. deal_notion_count: {deal_notion_count}", fg="green"))
+    click.echo(
+        click.style(f"Transforming firecrawl successfully. deal_firecrawl_count: {deal_firecrawl_count}", fg="green")
+    )
+    click.echo(click.style(f"Transforming jina successfully. deal_jina_count: {deal_jina_count}", fg="green"))
+
+
+@click.command("install-rag-pipeline-plugins", help="Install rag pipeline plugins.")
+@click.option(
+    "--input_file", prompt=True, help="The file to store the extracted unique identifiers.", default="plugins.jsonl"
+)
+@click.option(
+    "--output_file", prompt=True, help="The file to store the installed plugins.", default="installed_plugins.jsonl"
+)
+@click.option("--workers", prompt=True, help="The number of workers to install plugins.", default=100)
+def install_rag_pipeline_plugins(input_file, output_file, workers):
+    """
+    Install rag pipeline plugins
+    """
+    click.echo(click.style("Installing rag pipeline plugins", fg="yellow"))
+    plugin_migration = PluginMigration()
+    plugin_migration.install_rag_pipeline_plugins(
+        input_file,
+        output_file,
+        workers,
+    )
+    click.echo(click.style("Installing rag pipeline plugins successfully", fg="green"))

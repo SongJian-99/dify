@@ -43,7 +43,7 @@ api.add_resource(AppImportConfirmApi, "/apps/imports/<string:import_id>/confirm"
 api.add_resource(AppImportCheckDependenciesApi, "/apps/imports/<string:app_id>/check-dependencies")
 
 # Import other controllers
-from . import admin, apikey, extension, feature, ping, setup, version
+from . import admin, apikey, extension, feature, ping, setup, spec, version
 
 # Import app controllers
 from .app import (
@@ -70,7 +70,7 @@ from .app import (
 )
 
 # Import auth controllers
-from .auth import activate, data_source_bearer_auth, data_source_oauth, forgot_password, login, oauth
+from .auth import activate, data_source_bearer_auth, data_source_oauth, forgot_password, login, oauth, oauth_server
 
 # Import billing controllers
 from .billing import billing, compliance
@@ -84,8 +84,16 @@ from .datasets import (
     external,
     hit_testing,
     metadata,
-    upload_file,
     website,
+)
+from .datasets.rag_pipeline import (
+    datasource_auth,
+    datasource_content_preview,
+    rag_pipeline,
+    rag_pipeline_datasets,
+    rag_pipeline_draft_variable,
+    rag_pipeline_import,
+    rag_pipeline_workflow,
 )
 
 # Import explore controllers

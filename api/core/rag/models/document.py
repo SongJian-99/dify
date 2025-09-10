@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ChildDocument(BaseModel):
@@ -15,7 +15,7 @@ class ChildDocument(BaseModel):
     """Arbitrary metadata about the page content (e.g., source, relationships to other
         documents, etc.).
     """
-    metadata: dict = {}
+    metadata: dict = Field(default_factory=dict)
 
 
 class Document(BaseModel):
@@ -28,11 +28,54 @@ class Document(BaseModel):
     """Arbitrary metadata about the page content (e.g., source, relationships to other
         documents, etc.).
     """
-    metadata: dict = {}
+    metadata: dict = Field(default_factory=dict)
 
     provider: Optional[str] = "dify"
 
     children: Optional[list[ChildDocument]] = None
+
+
+class GeneralStructureChunk(BaseModel):
+    """
+    General Structure Chunk.
+    """
+
+    general_chunks: list[str]
+
+
+class ParentChildChunk(BaseModel):
+    """
+    Parent Child Chunk.
+    """
+
+    parent_content: str
+    child_contents: list[str]
+
+
+class ParentChildStructureChunk(BaseModel):
+    """
+    Parent Child Structure Chunk.
+    """
+
+    parent_child_chunks: list[ParentChildChunk]
+    parent_mode: str = "paragraph"
+
+
+class QAChunk(BaseModel):
+    """
+    QA Chunk.
+    """
+
+    question: str
+    answer: str
+
+
+class QAStructureChunk(BaseModel):
+    """
+    QAStructureChunk.
+    """
+
+    qa_chunks: list[QAChunk]
 
 
 class BaseDocumentTransformer(ABC):

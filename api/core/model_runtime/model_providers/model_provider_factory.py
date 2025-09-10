@@ -20,10 +20,8 @@ from core.model_runtime.model_providers.__base.text_embedding_model import TextE
 from core.model_runtime.model_providers.__base.tts_model import TTSModel
 from core.model_runtime.schema_validators.model_credential_schema_validator import ModelCredentialSchemaValidator
 from core.model_runtime.schema_validators.provider_credential_schema_validator import ProviderCredentialSchemaValidator
-from core.plugin.entities.plugin import ModelProviderID
 from core.plugin.entities.plugin_daemon import PluginModelProviderEntity
-from core.plugin.impl.asset import PluginAssetManager
-from core.plugin.impl.model import PluginModelClient
+from models.provider_ids import ModelProviderID
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +35,8 @@ class ModelProviderFactory:
     provider_position_map: dict[str, int]
 
     def __init__(self, tenant_id: str) -> None:
+        from core.plugin.impl.model import PluginModelClient
+
         self.provider_position_map = {}
 
         self.tenant_id = tenant_id
@@ -71,7 +71,7 @@ class ModelProviderFactory:
 
         return [extension.plugin_model_provider_entity.declaration for extension in sorted_extensions.values()]
 
-    def get_plugin_model_providers(self) -> Sequence[PluginModelProviderEntity]:
+    def get_plugin_model_providers(self) -> Sequence["PluginModelProviderEntity"]:
         """
         Get all plugin model providers
         :return: list of plugin model providers
@@ -109,7 +109,7 @@ class ModelProviderFactory:
         plugin_model_provider_entity = self.get_plugin_model_provider(provider=provider)
         return plugin_model_provider_entity.declaration
 
-    def get_plugin_model_provider(self, provider: str) -> PluginModelProviderEntity:
+    def get_plugin_model_provider(self, provider: str) -> "PluginModelProviderEntity":
         """
         Get plugin model provider
         :param provider: provider name
@@ -132,7 +132,7 @@ class ModelProviderFactory:
 
         return plugin_model_provider_entity
 
-    def provider_credentials_validate(self, *, provider: str, credentials: dict) -> dict:
+    def provider_credentials_validate(self, *, provider: str, credentials: dict):
         """
         Validate provider credentials
 
@@ -163,9 +163,7 @@ class ModelProviderFactory:
 
         return filtered_credentials
 
-    def model_credentials_validate(
-        self, *, provider: str, model_type: ModelType, model: str, credentials: dict
-    ) -> dict:
+    def model_credentials_validate(self, *, provider: str, model_type: ModelType, model: str, credentials: dict):
         """
         Validate model credentials
 
@@ -201,7 +199,7 @@ class ModelProviderFactory:
         return filtered_credentials
 
     def get_model_schema(
-        self, *, provider: str, model_type: ModelType, model: str, credentials: dict
+        self, *, provider: str, model_type: ModelType, model: str, credentials: dict | None
     ) -> AIModelEntity | None:
         """
         Get model schema
@@ -256,11 +254,6 @@ class ModelProviderFactory:
 
         # scan all providers
         plugin_model_provider_entities = self.get_plugin_model_providers()
-
-        # convert provider_configs to dict
-        provider_credentials_dict = {}
-        for provider_config in provider_configs:
-            provider_credentials_dict[provider_config.provider] = provider_config.credentials
 
         # traverse all model_provider_extensions
         providers = []
@@ -371,6 +364,8 @@ class ModelProviderFactory:
         mime_type = image_mime_types.get(extension, "image/png")
 
         # get icon bytes from plugin asset manager
+        from core.plugin.impl.asset import PluginAssetManager
+
         plugin_asset_manager = PluginAssetManager()
         return plugin_asset_manager.fetch_asset(tenant_id=self.tenant_id, id=file_name), mime_type
 
@@ -380,5 +375,6 @@ class ModelProviderFactory:
         :param provider: provider name
         :return: plugin id and provider name
         """
+
         provider_id = ModelProviderID(provider)
         return provider_id.plugin_id, provider_id.provider_name

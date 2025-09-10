@@ -191,6 +191,8 @@ const translation = {
       cancel: '취소',
       save: '저장',
       confirm: '추가 및 승인',
+      timeout: '타임아웃',
+      sseReadTimeout: 'SSE 읽기 타임아웃',
     },
     delete: 'MCP 서버 제거',
     deleteConfirmTitle: '{mcp}를 제거하시겠습니까?',
@@ -232,6 +234,7 @@ const translation = {
       publishTip: '앱이 게시되지 않았습니다. 먼저 앱을 게시하십시오.',
     },
   },
+  allTools: '모든 도구',
 }
 
 export default translation

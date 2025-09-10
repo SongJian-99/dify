@@ -4,7 +4,7 @@ import type {
   MCPServerDetail,
   Tool,
 } from '@/app/components/tools/types'
-import type { ToolWithProvider } from '@/app/components/workflow/types'
+import type { RAGRecommendedPlugins, ToolWithProvider } from '@/app/components/workflow/types'
 import type { AppIconType } from '@/types/app'
 import { useInvalid } from './use-base'
 import {
@@ -85,6 +85,8 @@ export const useCreateMCP = () => {
       icon_type: AppIconType
       icon: string
       icon_background?: string | null
+      timeout?: number
+      sse_read_timeout?: number
     }) => {
       return post<ToolWithProvider>('workspaces/current/tool-provider/mcp', {
         body: {
@@ -109,6 +111,8 @@ export const useUpdateMCP = ({
       icon: string
       icon_background?: string | null
       provider_id: string
+      timeout?: number
+      sse_read_timeout?: number
     }) => {
       return put('workspaces/current/tool-provider/mcp', {
         body: {
@@ -306,4 +310,17 @@ export const useRemoveProviderCredentials = ({
     },
     onSuccess,
   })
+}
+
+const useRAGRecommendedPluginListKey = [NAME_SPACE, 'rag-recommended-plugins']
+
+export const useRAGRecommendedPlugins = () => {
+  return useQuery<RAGRecommendedPlugins>({
+    queryKey: useRAGRecommendedPluginListKey,
+    queryFn: () => get<RAGRecommendedPlugins>('/rag/pipelines/recommended-plugins'),
+  })
+}
+
+export const useInvalidateRAGRecommendedPlugins = () => {
+  return useInvalid(useRAGRecommendedPluginListKey)
 }

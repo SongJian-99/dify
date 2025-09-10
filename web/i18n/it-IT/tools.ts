@@ -86,7 +86,6 @@ const translation = {
         'Http Header Key, Puoi lasciarlo come `Authorization` se non sai cos\'è o impostarlo su un valore personalizzato',
       types: {
         none: 'Nessuno',
-        api_key: 'API Key',
         apiKeyPlaceholder: 'Nome dell\'intestazione HTTP per API Key',
         apiValuePlaceholder: 'Inserisci API Key',
         api_key_query: 'Parametro di query',
@@ -202,6 +201,8 @@ const translation = {
       cancel: 'Annulla',
       save: 'Salva',
       confirm: 'Aggiungi & Autorizza',
+      timeout: 'Tempo scaduto',
+      sseReadTimeout: 'Timeout di lettura SSE',
     },
     delete: 'Rimuovi Server MCP',
     deleteConfirmTitle: 'Vuoi rimuovere {mcp}?',
@@ -243,6 +244,7 @@ const translation = {
       publishTip: 'App non pubblicata. Pubblica l\'app prima.',
     },
   },
+  allTools: 'Tutti gli strumenti',
 }
 
 export default translation

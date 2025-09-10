@@ -15,7 +15,7 @@ from typing import Any, Optional, cast
 import sqlalchemy as sa
 from sqlalchemy import DateTime, String, func, select
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from configs import dify_config
 from core.rag.index_processor.constant.built_in_field import BuiltInField, MetadataDataSource
@@ -28,6 +28,8 @@ from .base import Base
 from .engine import db
 from .model import App, Tag, TagBinding, UploadFile
 from .types import StringUUID
+
+logger = logging.getLogger(__name__)
 
 
 class DatasetPermissionEnum(enum.StrEnum):
@@ -59,12 +61,34 @@ class Dataset(Base):
     created_by = mapped_column(StringUUID, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp())
     updated_by = mapped_column(StringUUID, nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp())
-    embedding_model = db.Column(String(255), nullable=True)  # TODO: mapped_column
-    embedding_model_provider = db.Column(String(255), nullable=True)  # TODO: mapped_column
+    updated_at = mapped_column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+    embedding_model = mapped_column(db.String(255), nullable=True)
+    embedding_model_provider = mapped_column(db.String(255), nullable=True)
+    keyword_number = db.Column(db.Integer, nullable=True, server_default=db.text("10"))
     collection_binding_id = mapped_column(StringUUID, nullable=True)
     retrieval_model = mapped_column(JSONB, nullable=True)
-    built_in_field_enabled: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default=sa.text("false"))
+    built_in_field_enabled = mapped_column(db.Boolean, nullable=False, server_default=db.text("false"))
+    icon_info = db.Column(JSONB, nullable=True)
+    runtime_mode = db.Column(db.String(255), nullable=True, server_default=db.text("'general'::character varying"))
+    pipeline_id = db.Column(StringUUID, nullable=True)
+    chunk_structure = db.Column(db.String(255), nullable=True)
+
+    @property
+    def total_documents(self):
+        return db.session.query(func.count(Document.id)).filter(Document.dataset_id == self.id).scalar()
+
+    @property
+    def total_available_documents(self):
+        return (
+            db.session.query(func.count(Document.id))
+            .filter(
+                Document.dataset_id == self.id,
+                Document.indexing_status == "completed",
+                Document.enabled == True,
+                Document.archived == False,
+            )
+            .scalar()
+        )
 
     @property
     def dataset_keyword_table(self):
@@ -148,8 +172,10 @@ class Dataset(Base):
         )
 
     @property
-    def doc_form(self):
-        document = db.session.query(Document).where(Document.dataset_id == self.id).first()
+    def doc_form(self) -> Optional[str]:
+        if self.chunk_structure:
+            return self.chunk_structure
+        document = db.session.query(Document).filter(Document.dataset_id == self.id).first()
         if document:
             return document.doc_form
         return None
@@ -203,6 +229,14 @@ class Dataset(Base):
             "external_knowledge_api_name": external_knowledge_api.name,
             "external_knowledge_api_endpoint": json.loads(external_knowledge_api.settings).get("endpoint", ""),
         }
+
+    @property
+    def is_published(self):
+        if self.pipeline_id:
+            pipeline = db.session.query(Pipeline).filter(Pipeline.id == self.pipeline_id).first()
+            if pipeline:
+                return pipeline.is_published
+        return False
 
     @property
     def doc_metadata(self):
@@ -284,7 +318,7 @@ class DatasetProcessRule(Base):
         "segmentation": {"delimiter": "\n", "max_tokens": 500, "chunk_overlap": 50},
     }
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "dataset_id": self.dataset_id,
@@ -293,7 +327,7 @@ class DatasetProcessRule(Base):
         }
 
     @property
-    def rules_dict(self):
+    def rules_dict(self) -> dict[str, Any] | None:
         try:
             return json.loads(self.rules) if self.rules else None
         except JSONDecodeError:
@@ -390,21 +424,21 @@ class Document(Base):
         return status
 
     @property
-    def data_source_info_dict(self):
+    def data_source_info_dict(self) -> dict[str, Any]:
         if self.data_source_info:
             try:
-                data_source_info_dict = json.loads(self.data_source_info)
+                data_source_info_dict: dict[str, Any] = json.loads(self.data_source_info)
             except JSONDecodeError:
                 data_source_info_dict = {}
 
             return data_source_info_dict
-        return None
+        return {}
 
     @property
-    def data_source_detail_dict(self):
+    def data_source_detail_dict(self) -> dict[str, Any]:
         if self.data_source_info:
             if self.data_source_type == "upload_file":
-                data_source_info_dict = json.loads(self.data_source_info)
+                data_source_info_dict: dict[str, Any] = json.loads(self.data_source_info)
                 file_detail = (
                     db.session.query(UploadFile)
                     .where(UploadFile.id == data_source_info_dict["upload_file_id"])
@@ -423,7 +457,8 @@ class Document(Base):
                         }
                     }
             elif self.data_source_type in {"notion_import", "website_crawl"}:
-                return json.loads(self.data_source_info)
+                result: dict[str, Any] = json.loads(self.data_source_info)
+                return result
         return {}
 
     @property
@@ -469,7 +504,7 @@ class Document(Base):
         return self.updated_at
 
     @property
-    def doc_metadata_details(self):
+    def doc_metadata_details(self) -> list[dict[str, Any]] | None:
         if self.doc_metadata:
             document_metadatas = (
                 db.session.query(DatasetMetadata)
@@ -479,9 +514,9 @@ class Document(Base):
                 )
                 .all()
             )
-            metadata_list = []
+            metadata_list: list[dict[str, Any]] = []
             for metadata in document_metadatas:
-                metadata_dict = {
+                metadata_dict: dict[str, Any] = {
                     "id": metadata.id,
                     "name": metadata.name,
                     "type": metadata.type,
@@ -495,13 +530,13 @@ class Document(Base):
         return None
 
     @property
-    def process_rule_dict(self):
-        if self.dataset_process_rule_id:
+    def process_rule_dict(self) -> dict[str, Any] | None:
+        if self.dataset_process_rule_id and self.dataset_process_rule:
             return self.dataset_process_rule.to_dict()
         return None
 
-    def get_built_in_fields(self):
-        built_in_fields = []
+    def get_built_in_fields(self) -> list[dict[str, Any]]:
+        built_in_fields: list[dict[str, Any]] = []
         built_in_fields.append(
             {
                 "id": "built-in",
@@ -544,7 +579,7 @@ class Document(Base):
         )
         return built_in_fields
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "tenant_id": self.tenant_id,
@@ -590,13 +625,13 @@ class Document(Base):
             "data_source_info_dict": self.data_source_info_dict,
             "average_segment_length": self.average_segment_length,
             "dataset_process_rule": self.dataset_process_rule.to_dict() if self.dataset_process_rule else None,
-            "dataset": self.dataset.to_dict() if self.dataset else None,
+            "dataset": None,  # Dataset class doesn't have a to_dict method
             "segment_count": self.segment_count,
             "hit_count": self.hit_count,
         }
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dict(cls, data: dict[str, Any]):
         return cls(
             id=data.get("id"),
             tenant_id=data.get("tenant_id"),
@@ -709,50 +744,52 @@ class DocumentSegment(Base):
         )
 
     @property
-    def child_chunks(self):
-        process_rule = self.document.dataset_process_rule
-        if process_rule.mode == "hierarchical":
-            rules = Rule(**process_rule.rules_dict)
-            if rules.parent_mode and rules.parent_mode != ParentMode.FULL_DOC:
-                child_chunks = (
-                    db.session.query(ChildChunk)
-                    .where(ChildChunk.segment_id == self.id)
-                    .order_by(ChildChunk.position.asc())
-                    .all()
-                )
-                return child_chunks or []
-            else:
-                return []
-        else:
+    def child_chunks(self) -> list[Any]:
+        if not self.document:
             return []
+        process_rule = self.document.dataset_process_rule
+        if process_rule and process_rule.mode == "hierarchical":
+            rules_dict = process_rule.rules_dict
+            if rules_dict:
+                rules = Rule(**rules_dict)
+                if rules.parent_mode and rules.parent_mode != ParentMode.FULL_DOC:
+                    child_chunks = (
+                        db.session.query(ChildChunk)
+                        .where(ChildChunk.segment_id == self.id)
+                        .order_by(ChildChunk.position.asc())
+                        .all()
+                    )
+                    return child_chunks or []
+        return []
 
-    def get_child_chunks(self):
-        process_rule = self.document.dataset_process_rule
-        if process_rule.mode == "hierarchical":
-            rules = Rule(**process_rule.rules_dict)
-            if rules.parent_mode:
-                child_chunks = (
-                    db.session.query(ChildChunk)
-                    .where(ChildChunk.segment_id == self.id)
-                    .order_by(ChildChunk.position.asc())
-                    .all()
-                )
-                return child_chunks or []
-            else:
-                return []
-        else:
+    def get_child_chunks(self) -> list[Any]:
+        if not self.document:
             return []
+        process_rule = self.document.dataset_process_rule
+        if process_rule and process_rule.mode == "hierarchical":
+            rules_dict = process_rule.rules_dict
+            if rules_dict:
+                rules = Rule(**rules_dict)
+                if rules.parent_mode:
+                    child_chunks = (
+                        db.session.query(ChildChunk)
+                        .where(ChildChunk.segment_id == self.id)
+                        .order_by(ChildChunk.position.asc())
+                        .all()
+                    )
+                    return child_chunks or []
+        return []
 
     @property
-    def sign_content(self):
+    def sign_content(self) -> str:
         return self.get_sign_content()
 
-    def get_sign_content(self):
-        signed_urls = []
+    def get_sign_content(self) -> str:
+        signed_urls: list[tuple[int, int, str]] = []
         text = self.content
 
         # For data before v0.10.0
-        pattern = r"/files/([a-f0-9\-]+)/image-preview"
+        pattern = r"/files/([a-f0-9\-]+)/image-preview(?:\?.*?)?"
         matches = re.finditer(pattern, text)
         for match in matches:
             upload_file_id = match.group(1)
@@ -764,11 +801,12 @@ class DocumentSegment(Base):
             encoded_sign = base64.urlsafe_b64encode(sign).decode()
 
             params = f"timestamp={timestamp}&nonce={nonce}&sign={encoded_sign}"
-            signed_url = f"{match.group(0)}?{params}"
+            base_url = f"/files/{upload_file_id}/image-preview"
+            signed_url = f"{base_url}?{params}"
             signed_urls.append((match.start(), match.end(), signed_url))
 
         # For data after v0.10.0
-        pattern = r"/files/([a-f0-9\-]+)/file-preview"
+        pattern = r"/files/([a-f0-9\-]+)/file-preview(?:\?.*?)?"
         matches = re.finditer(pattern, text)
         for match in matches:
             upload_file_id = match.group(1)
@@ -780,7 +818,27 @@ class DocumentSegment(Base):
             encoded_sign = base64.urlsafe_b64encode(sign).decode()
 
             params = f"timestamp={timestamp}&nonce={nonce}&sign={encoded_sign}"
-            signed_url = f"{match.group(0)}?{params}"
+            base_url = f"/files/{upload_file_id}/file-preview"
+            signed_url = f"{base_url}?{params}"
+            signed_urls.append((match.start(), match.end(), signed_url))
+
+        # For tools directory - direct file formats (e.g., .png, .jpg, etc.)
+        # Match URL including any query parameters up to common URL boundaries (space, parenthesis, quotes)
+        pattern = r"/files/tools/([a-f0-9\-]+)\.([a-zA-Z0-9]+)(?:\?[^\s\)\"\']*)?"
+        matches = re.finditer(pattern, text)
+        for match in matches:
+            upload_file_id = match.group(1)
+            file_extension = match.group(2)
+            nonce = os.urandom(16).hex()
+            timestamp = str(int(time.time()))
+            data_to_sign = f"file-preview|{upload_file_id}|{timestamp}|{nonce}"
+            secret_key = dify_config.SECRET_KEY.encode() if dify_config.SECRET_KEY else b""
+            sign = hmac.new(secret_key, data_to_sign.encode(), hashlib.sha256).digest()
+            encoded_sign = base64.urlsafe_b64encode(sign).decode()
+
+            params = f"timestamp={timestamp}&nonce={nonce}&sign={encoded_sign}"
+            base_url = f"/files/tools/{upload_file_id}.{file_extension}"
+            signed_url = f"{base_url}?{params}"
             signed_urls.append((match.start(), match.end(), signed_url))
 
         # Reconstruct the text with signed URLs
@@ -888,17 +946,22 @@ class DatasetKeywordTable(Base):
     )
 
     @property
-    def keyword_table_dict(self):
+    def keyword_table_dict(self) -> dict[str, set[Any]] | None:
         class SetDecoder(json.JSONDecoder):
-            def __init__(self, *args, **kwargs):
-                super().__init__(object_hook=self.object_hook, *args, **kwargs)
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                def object_hook(dct: Any) -> Any:
+                    if isinstance(dct, dict):
+                        result: dict[str, Any] = {}
+                        items = cast(dict[str, Any], dct).items()
+                        for keyword, node_idxs in items:
+                            if isinstance(node_idxs, list):
+                                result[keyword] = set(cast(list[Any], node_idxs))
+                            else:
+                                result[keyword] = node_idxs
+                        return result
+                    return dct
 
-            def object_hook(self, dct):
-                if isinstance(dct, dict):
-                    for keyword, node_idxs in dct.items():
-                        if isinstance(node_idxs, list):
-                            dct[keyword] = set(node_idxs)
-                return dct
+                super().__init__(object_hook=object_hook, *args, **kwargs)
 
         # get dataset
         dataset = db.session.query(Dataset).filter_by(id=self.dataset_id).first()
@@ -913,8 +976,8 @@ class DatasetKeywordTable(Base):
                 if keyword_table_text:
                     return json.loads(keyword_table_text.decode("utf-8"), cls=SetDecoder)
                 return None
-            except Exception as e:
-                logging.exception("Failed to load keyword table from file: %s", file_key)
+            except Exception:
+                logger.exception("Failed to load keyword table from file: %s", file_key)
                 return None
 
 
@@ -1024,7 +1087,7 @@ class ExternalKnowledgeApis(Base):
     updated_by = mapped_column(StringUUID, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp())
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "tenant_id": self.tenant_id,
@@ -1037,14 +1100,14 @@ class ExternalKnowledgeApis(Base):
         }
 
     @property
-    def settings_dict(self):
+    def settings_dict(self) -> dict[str, Any] | None:
         try:
             return json.loads(self.settings) if self.settings else None
         except JSONDecodeError:
             return None
 
     @property
-    def dataset_bindings(self):
+    def dataset_bindings(self) -> list[dict[str, Any]]:
         external_knowledge_bindings = (
             db.session.query(ExternalKnowledgeBindings)
             .where(ExternalKnowledgeBindings.external_knowledge_api_id == self.id)
@@ -1052,7 +1115,7 @@ class ExternalKnowledgeApis(Base):
         )
         dataset_ids = [binding.dataset_id for binding in external_knowledge_bindings]
         datasets = db.session.query(Dataset).where(Dataset.id.in_(dataset_ids)).all()
-        dataset_bindings = []
+        dataset_bindings: list[dict[str, Any]] = []
         for dataset in datasets:
             dataset_bindings.append({"id": dataset.id, "name": dataset.name})
 
@@ -1156,3 +1219,112 @@ class DatasetMetadataBinding(Base):
     document_id = mapped_column(StringUUID, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp())
     created_by = mapped_column(StringUUID, nullable=False)
+
+
+class PipelineBuiltInTemplate(Base):  # type: ignore[name-defined]
+    __tablename__ = "pipeline_built_in_templates"
+    __table_args__ = (db.PrimaryKeyConstraint("id", name="pipeline_built_in_template_pkey"),)
+
+    id = db.Column(StringUUID, server_default=db.text("uuid_generate_v4()"))
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    chunk_structure = db.Column(db.String(255), nullable=False)
+    icon = db.Column(db.JSON, nullable=False)
+    yaml_content = db.Column(db.Text, nullable=False)
+    copyright = db.Column(db.String(255), nullable=False)
+    privacy_policy = db.Column(db.String(255), nullable=False)
+    position = db.Column(db.Integer, nullable=False)
+    install_count = db.Column(db.Integer, nullable=False, default=0)
+    language = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+    updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+    created_by = db.Column(StringUUID, nullable=False)
+    updated_by = db.Column(StringUUID, nullable=True)
+
+    @property
+    def created_user_name(self):
+        account = db.session.query(Account).filter(Account.id == self.created_by).first()
+        if account:
+            return account.name
+        return ""
+
+
+class PipelineCustomizedTemplate(Base):  # type: ignore[name-defined]
+    __tablename__ = "pipeline_customized_templates"
+    __table_args__ = (
+        db.PrimaryKeyConstraint("id", name="pipeline_customized_template_pkey"),
+        db.Index("pipeline_customized_template_tenant_idx", "tenant_id"),
+    )
+
+    id = db.Column(StringUUID, server_default=db.text("uuid_generate_v4()"))
+    tenant_id = db.Column(StringUUID, nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    chunk_structure = db.Column(db.String(255), nullable=False)
+    icon = db.Column(db.JSON, nullable=False)
+    position = db.Column(db.Integer, nullable=False)
+    yaml_content = db.Column(db.Text, nullable=False)
+    install_count = db.Column(db.Integer, nullable=False, default=0)
+    language = db.Column(db.String(255), nullable=False)
+    created_by = db.Column(StringUUID, nullable=False)
+    updated_by = db.Column(StringUUID, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+    updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+
+    @property
+    def created_user_name(self):
+        account = db.session.query(Account).filter(Account.id == self.created_by).first()
+        if account:
+            return account.name
+        return ""
+
+
+class Pipeline(Base):  # type: ignore[name-defined]
+    __tablename__ = "pipelines"
+    __table_args__ = (db.PrimaryKeyConstraint("id", name="pipeline_pkey"),)
+
+    id = db.Column(StringUUID, server_default=db.text("uuid_generate_v4()"))
+    tenant_id: Mapped[str] = db.Column(StringUUID, nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=False, server_default=db.text("''::character varying"))
+    workflow_id = db.Column(StringUUID, nullable=True)
+    is_public = db.Column(db.Boolean, nullable=False, server_default=db.text("false"))
+    is_published = db.Column(db.Boolean, nullable=False, server_default=db.text("false"))
+    created_by = db.Column(StringUUID, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+    updated_by = db.Column(StringUUID, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+
+    def retrieve_dataset(self, session: Session):
+        return session.query(Dataset).filter(Dataset.pipeline_id == self.id).first()
+
+
+class DocumentPipelineExecutionLog(Base):
+    __tablename__ = "document_pipeline_execution_logs"
+    __table_args__ = (
+        db.PrimaryKeyConstraint("id", name="document_pipeline_execution_log_pkey"),
+        db.Index("document_pipeline_execution_logs_document_id_idx", "document_id"),
+    )
+
+    id = db.Column(StringUUID, server_default=db.text("uuid_generate_v4()"))
+    pipeline_id = db.Column(StringUUID, nullable=False)
+    document_id = db.Column(StringUUID, nullable=False)
+    datasource_type = db.Column(db.String(255), nullable=False)
+    datasource_info = db.Column(db.Text, nullable=False)
+    datasource_node_id = db.Column(db.String(255), nullable=False)
+    input_data = db.Column(db.JSON, nullable=False)
+    created_by = db.Column(StringUUID, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+
+
+class PipelineRecommendedPlugin(Base):
+    __tablename__ = "pipeline_recommended_plugins"
+    __table_args__ = (db.PrimaryKeyConstraint("id", name="pipeline_recommended_plugin_pkey"),)
+
+    id = db.Column(StringUUID, server_default=db.text("uuid_generate_v4()"))
+    plugin_id = db.Column(db.Text, nullable=False)
+    provider_name = db.Column(db.Text, nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+    updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
